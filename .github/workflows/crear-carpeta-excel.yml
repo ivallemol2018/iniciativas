@@ -33,7 +33,7 @@ jobs:
 
       - name: Ejecutar script centralizado
         run: |
-          python scripts/crear_carpeta.py ${{ steps.detectar.outputs.files }}
+          python scripts/crear_archivo.py ${{ steps.detectar.outputs.files }}
 
       - name: Commit y push de la nueva carpeta
         run: |
