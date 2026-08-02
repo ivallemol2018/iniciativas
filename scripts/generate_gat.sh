@@ -3,7 +3,7 @@
 set -o pipefail
 
 # Variables necesarias
-client_id = $APP_ID
+client_id=$APP_ID
 PRIVATE_KEY=$PRIVATE_KEY
 ORGANIZATION=$ORGANIZATION
 
