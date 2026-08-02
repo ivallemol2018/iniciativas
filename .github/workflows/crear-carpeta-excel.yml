@@ -2,7 +2,7 @@ name: Registro aprobacion de APIS de iniciativas
 
 on: 
   pull_request:
-	types: [opened, synchronize, edited]
+    types: [opened, synchronize, edited]
     branches:
       - master
      
@@ -15,8 +15,8 @@ jobs:
        uses: actions/checkout@v4
        
      - name: Generar token
-       uses: generate_token
-       run: |
+       id: generate_token
+       run:
         chmod +x scripts/generate_gat.sh
         ./scripts/generate_gat.sh
        env:
