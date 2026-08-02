@@ -4,7 +4,7 @@ on:
   pull_request:
     types: [opened, synchronize, edited]
     branches:
-      - main
+      - master
      
 jobs:
   validate_user:
@@ -16,7 +16,7 @@ jobs:
        
      - name: Generar token
        id: generate_token
-       run:
+       run: |
         chmod +x scripts/generate_gat.sh
         ./scripts/generate_gat.sh
        env:
