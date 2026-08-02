@@ -4,7 +4,7 @@ on:
   pull_request:
     types: [opened, synchronize, edited]
     branches:
-      - master
+      - main
      
 jobs:
   validate_user:
@@ -24,7 +24,37 @@ jobs:
         PRIVATE_KEY: ${{ secrets.GH_APP_PK_ARCHITECTURE_INITIATIVES }}
         ORGANIZATION: ${{ github.repository_owner }}
        
-    
+  validate_pr:
+    name: Validar Pull Request
+    runs-on: ubuntu-latest
+    steps:
+     - name: Descargar repo
+       uses: actions/checkout@v4
+       
+     - name: Generar token
+       id: generate_token
+       run: |
+        chmod +x scripts/generate_gat.sh
+        ./scripts/generate_gat.sh
+       env:
+        APP_ID: ${{vars.GH_APP_ID_ARCHITECTURE_INITIATIVES }}
+        PRIVATE_KEY: ${{ secrets.GH_APP_PK_ARCHITECTURE_INITIATIVES }}
+        ORGANIZATION: ${{ github.repository_owner }}
+     
+     - name: Validar PR
+       run: |
+        python3 scripts/validate_pr.py
+       env:
+        GITHUB_TOKEN: ${{ env.ACCESS_TOKEN }}
+        GITHUB_OWNER: ${{ github.repository_owner }}
+        GITHUB_REPO: ${{ github.event.repository.name }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        
+     - name: Instalar dependencias Python
+       run: |
+         pip install pandas openpyxl requests
+
   create_repo:
     name: Crear Repositorio de APIs
     needs: [validate_pr, validate_user]
