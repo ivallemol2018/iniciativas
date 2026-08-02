@@ -40,7 +40,7 @@ payload=$(echo -n "${payload_json}" | b64enc)
 
 
 header_payload="${header}.${payload}"
-signature=$(echo -n "${header_payload}" | openssl dgst -sha256 -sign <echo -n "${PRIVATE_KEY}" | b64enc)
+signature=$(echo -n "${header_payload}" | openssl dgst -sha256 -sign <(echo -n "${PRIVATE_KEY}") | b64enc)
 
 
 jwt_token="${header_payload}.${signature}"
