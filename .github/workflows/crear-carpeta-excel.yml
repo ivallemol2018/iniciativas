@@ -1,44 +1,25 @@
-name: Crear carpeta según archivo Excel
+name: Registro aprobacion de APIS de iniciativas
 
-on:
-  push:
-    paths:
-      - 'uploads/**.xlsx'
-      - 'uploads/**.xls'
-
-permissions:
-  contents: write
-
+on: 
+  pull_request:
+    types: [opened, synchronize, edited]
+    branches:
+      - master
+     
 jobs:
-  crear-carpeta:
+  validate_user:
+    name: Validar Permisos de Usuario
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout repo
-        uses: actions/checkout@v4
-        with:
-          fetch-depth: 2
-
-      - name: Configurar Python
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-
-      - name: Detectar archivos Excel nuevos/modificados
-        id: detectar
-        run: |
-          FILES=$(git diff --name-only HEAD^ HEAD -- 'uploads/*.xlsx' 'uploads/*.xls' || true)
-          echo "files<<EOF" >> $GITHUB_OUTPUT
-          echo "$FILES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
-
-      - name: Ejecutar script centralizado
-        run: |
-          python scripts/crear_archivo.py ${{ steps.detectar.outputs.files }}
-
-      - name: Commit y push de la nueva carpeta
-        run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add .
-          git diff --cached --quiet || git commit -m "Auto: crear carpeta según archivo Excel subido"
-          git push
+     - name: Descargar repo
+       uses: actions/checkout@v4
+       
+     - name: Generar token
+       id: generate_token
+       run: |
+        chmod +x scripts/generate_gat.sh
+        ./scripts/generate_gat.sh
+       env:
+        APP_ID: ${{vars.GH_APP_ID_ARCHITECTURE_INITIATIVES }}
+        PRIVATE_KEY: ${{ secrets.GH_APP_PK_ARCHITECTURE_INITIATIVES }}
+        ORGANIZATION: ${{ github.repository_owner }}
