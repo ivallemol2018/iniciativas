@@ -1,0 +1,67 @@
+name: Registro aprobacion de APIS de iniciativas
+
+on: 
+  pull_request:
+	types: [opened, synchronize, edited]
+    branches:
+      - master
+     
+jobs:
+  validate_user:
+    name: Validar Permisos de Usuario
+    runs-on: ubuntu-latest
+    steps:
+     - name: Descargar repo
+       uses: actions/checkout@v4
+       
+     - name: Generar token
+       uses: generate_token
+       run: |
+        chmod +x scripts/generate_gat.sh
+        ./scripts/generate_gat.sh
+       env:
+        APP_ID: ${{vars.GH_APP_ID_ARCHITECTURE_INITIATIVES }}
+        PRIVATE_KEY: ${{ secrets.GH_APP_PK_ARCHITECTURE_INITIATIVES }}
+        ORGANIZATION: ${{ github.repository_owner }}
+       
+    
+  create_repo:
+    name: Crear Repositorio de APIs
+    needs: [validate_pr, validate_user]
+    runs-on: ubuntu-latest
+    outputs:
+      api_list: ${{ steps.set-outputs.outputs.api_list }}
+    steps:
+     - name: Descargar repo
+       uses: actions/checkout@v4
+       
+     - name: Instalar dependencias Python
+       run: |
+        pip install pandas openpyxl requests
+        
+     - name: Procesar excel
+       run: |
+        python3 scripts/process_excel.py
+       env:
+        GITHUB_TOKEN: ${{ env.ACCESS_TOKEN }}
+        GITHUB_OWNER: ${{ github.repository_owner }}
+        GITHUB_REPO: ${{ github.event.repository.name }}
+        PR_NUMBER: ${{ github.env.pull_request.number }}
+        
+     - name: Crear repositorios
+       if: ${{ env.REPOS_TO_CREATE != 'W10=' && env.REPOS_TO_CREATE != '' }}
+       env:
+        GITHUB_TOKEN: ${{ env.ACCESS_TOKEN }}
+        GITHUB_OWNER: ${{ github.repository_owner }}
+        GITHUB_REPO: ${{ github.event.repository.name }}
+        PR_NUMBER: ${{ github.env.pull_request.number }}
+        REPOS_TO_CREATE: ${{ env.REPOS_TO_CREATE }}
+        REPO_CREATION_ORIGIN: ${{ vars.REPO_CREATION_ORIGIN }}
+        INITIATIVE_CODE: ${{ needs.validate_pr.outputs.initiative_code }}
+       run: |
+        python3 scripts/create_repos.py
+        
+     - name: Setear parametros de salida
+       id: set-outputs
+       run: |
+        echo "api_list=$ {{ env.REPOS_TO_CREATE }}" >> $GITHUB_OUTPUT

@@ -1,0 +1,55 @@
+MONGO_URL=mongodb://localhost:27017/fast-shop-dev?retryWrites=true&w=majority
+# Cloudinary
+CLOUDINARY_URL=cloudinary://543524287921487:XcBntg5ZHlrQ3V8wQl_i-2pxuvw@do1uwxcks
+
+NEXT_PUBLIC_TAX_RATE=0.18
+NEXT_TAX_RATE=18
+
+NEXT_PUBLIC_CURRENCY='S/'
+
+APINET_RENIEC_URL = https://api.apis.net.pe/v2/reniec/dni
+APINET_SUNAT_URL = https://api.apis.net.pe/v2/sunat/ruc
+TOKEN_APINET = apis-token-6492.J3pGqMXVgCPK73LFH9lANIJQzRoh4nYS
+
+NEXTAUTH_SECRET = dsfsfsdfdf
+
+NEXT_PUBLIC_FIREBASE_API_KEY = AIzaSyDCezptSRgd3BKw4HM5HHxTfhBrmbQBJdc
+NEXT_PUBLIC_FIREBASE_APP_ID = 1:629660575598:web:30f336735b05213c67837f
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN = fast-shop-b9dec.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID = 629660575598
+NEXT_PUBLIC_FIREBASE_PROJECT_ID = fast-shop-b9dec
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET = fast-shop-b9dec.appspot.com
+
+NEXT_PUBLIC_FIREBASE_CLIENT_EMAIL = firebase-adminsdk-4kbla@fast-shop-b9dec.iam.gserviceaccount.com
+NEXT_PUBLIC_FIREBASE_PRIVATE_KEY  ="-----BEGIN PRIVATE KEY-----\nMIIEvAIBADANBgkqhkiG9w0BAQEFAASCBKYwggSiAgEAAoIBAQDb9Yc9jpr3Wzke\npxeHqmXjLQDuriGLiUKS15Vstg7tZGXNPea++hnQC/RNP1Js+TRWi1FnDm3Kigm8\nfv0NpOhvSC+tXgnv+JTmZhymORFQV5RP3iVkaX42XW+dY+ceyERyredE4maWc50i\nSWFSc9tLmm0GXQkrOh3X4GI9QdCpxcMermZ5HXg0FE2CwBbeWni2YJFwvro9sIVd\n/yRqR4uCLJMHciKolsdlcCOYs3nMV65/Z70jqugOPbDGIBiWvnpjXsH0AomULVrz\ntsv0/wLJqAQgQRuoC3sFKf5gH26GrtfNrq5tmXA0YQkTlCgOi28jDrlSXUzli1XD\nQ7R8rB9BAgMBAAECggEABY36v1Q1l5+HHr4LexKThhwh1OUy1ao+sySckmU6lUYe\nyAMTK6l3M2jJ35WEyFm2t6THBno3zZCU1FzEmS6b7At/oLoqOBQn9nWHra7tQAEm\nLqomeZWsaUUMx4W5VW6rQ9Yea//npU8AHdiKi6F/XTZmIG4DCENsc4IoGPHrig33\ndd0EJlWB5ztzDRdGJjj2aHa2mUoLdQrVI0aHWujgbFpcyooflSYAt9IehIau2A2R\nUWKdyi7dpTc3imdthSsoAEjDlTu1mNL4pPcX8vTXAnAVK26LIKTH2m8gV2qHKYFn\n/Olv+Ft3/maMeaHZvdh8QosqdCEBtwNL5dCQQ7vxHQKBgQDxRGLEjUD1kkpDM3Qa\nS0CDN+UGYID/e1KwrdpFfj3NGxZHmgGTE5L6yRNFJZfRE8HBmXvulLSB2yV3k6ER\n1GoBc+o5S9oJzbUDL9P07VWk4/GnYmQssEsH0fWMAwsscez0SgDCVV+I7uXv3Uj/\nznbV20+FZVtS9Re8CAxghAn69wKBgQDpZAtITkrqxhXKfzK8dYopPzLVJ/Z1wduP\nX5sbBpuO4So59qgStgbCRjrJUB5i2GL6NUiW51byo5H/GFwUbwGJQ3v6qJO4dhoR\njIzZf0OXPd4Fk16gNI5pHMduGm5ZR0AwMBW7jlYAWakO+ZuI0cGsJaab07klF70+\nS+2INTyxhwKBgBvUz6/su3mYjoiB/vqpg5+fawP5Tegqybcn1u39ShPG9CL+WQAm\nWeYkG9z2ITU1GjzC/9DdxpTUOtY4aXQtFK1mObayUUygNilP8xtl5WNICDBO4U9m\nZsFYLwMftsJBwhvMDZpdTs/0/wFUfX9EyeCRk/LHZmmDbGF8bDEWCjCxAoGAIwnp\nA7b1Wl/Yv6jvBgojbuPVDtlMEAvFmbXBxIHucrntK/yS6RQ42YvPoY+MsExKN8Qu\nHLGohQ73iTOwB0VPFrtx7oTGgKgCa+YM804+6ILaRT4Fs8mQI8m1Sxteu7qNsW5W\npOzOjojnb58bsaPEDsMsSzKzFhWFTMf7ZjqP3RsCgYA7IXDmgygilv/akb8XjMtf\ndAW8o6oxjPU4W4Ko8hVFChHhGa+A9+pQpRd2UPn82H+Bg6N45qxoNbldDMsS/KTo\nt+9KL0cQS4NWjTjGnxiHkMZZIhrrFfQOI18YEuMog/gpind68K7JGG1FUdVg1RdN\nN/+Xx5uD9UYTVcQP8d7qQg==\n-----END PRIVATE KEY-----\n"
+
+
+
+*********************************************
+
+NEXT_PUBLIC_FIREBASE_API_KEY = AIzaSyBxURsNTwPhkMRqviVJ0SD9_MozWlf5iAY
+NEXT_PUBLIC_FIREBASE_APP_ID = 1:863801089166:web:1abf36caf9fb0fa3567ddf
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN = next-aut-username.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID = 863801089166
+NEXT_PUBLIC_FIREBASE_PROJECT_ID = next-aut-username
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET = next-aut-username.appspot.com
+
+NEXT_PUBLIC_FIREBASE_CLIENT_EMAIL = firebase-adminsdk-txk65@next-aut-username.iam.gserviceaccount.com
+NEXT_PUBLIC_FIREBASE_PRIVATE_KEY  ="-----BEGIN PRIVATE KEY-----\nMIIEvgIBADANBgkqhkiG9w0BAQEFAASCBKgwggSkAgEAAoIBAQDKEPwc50J+8jn9\nCUXnJo7deTOosHpU0Mv074y73HUa5vmKXBpNUzYBqcmYFTgGwXHAgDU4nrtAy4Wt\n7tXygmw4AWYFu7cDt+Ry2Rtqw57RyO8oJD+DFCQEwn/2QIsrf9Uj3AFTyP48GRFe\nVLOc3m+mR1XABwCNfilORPsbRKPX0cF/mpRv23q2B5c//8oLuFVrubrwVFOT8abO\nIWRY04PRsZVjLKm2xRVhP8PnG24GitghLWmBjZX/yAY+DX9166M447k9OW3Y9szE\noRYRblfB3BmFVV25HQJcORqU3ipzqxR0jCQn6PmeumGR7fe5Z27+2f1ls9n8yxWP\nWYqQ7lLxAgMBAAECggEABHZbRmHX5IRdL8HFqv4h/mgY8hjgL0p1tFDjHJph4xhY\ntiJ//jKW8k4ruWPtbT569QpWooubaHMNAyEGZ6kKiVc7Ix60QvYLqsPoWvNf1qXi\n5ZsKwAVMRcKi+sp7iE8ah7t8M3J5ktTCUUpDkSttgcdBy/TSfLsmqPDVU1vVaLtk\nWZeQIvrBw5d/k6uublSUDjXN9f1DX5qZgBZZnqWDhaTRc0ZJyITSiMEBvRfHdgSn\nfdmcYiEpx650Htjla/Nb7N/Rz9w2P4c2sQV3gz2yvoAA6fZKmT4KNdrEa4cT+w0G\nOyDi+oilPSJpW5C4dM/wen7KEg5xp3o14Bo/jfDNtQKBgQDqYbB8zKySU8CjCyna\n3ipQEQbpf2r8+QQvc+MgVtlaPrKStL0QhiwJ3yy7nQxbkp96kw4BJeDCKmZWRgfX\nRlG8DYQ1pCxljf54kTHQMddpRJqyWDSoJYxs1AbArEfQjDJv/lnVwK/LexwArhb6\nUX1dmrdu6+l4prqybzhPoe5eLwKBgQDctEFEi6bA2iHN0XUpUd1ZCDHdlNRgbtz/\nZ9BYzgAlh0/uK/5BviYJVYfQc9aF8U8Wdcu53wcUOJjIlAEpfTc5beAp0sLS0bLG\nbPgpXwJNVtc5sr0zs1de8cZAo1AQZjG9BXnf097iRSL6lHs8AQZeSJhPm8mSf43p\nX+/3QVA43wKBgQC3RbgpfiobKZ5iX6JU4JAZl5beEqJoOZfKO0YIzaCb7pbYHLgS\nKbhZ58ck1UMKf/ZwdHjo8ON1MI5hO9V5wiS7dZ5CC6QjrQqk4HQhJjgYump0toBG\nU0Yg+xJkqtJlApuV8z/v4wITjKpy5a5WAk6TWR3CgHpJu6YVTN6tdiPcRQKBgD0C\n44wUYvurEW85OP88L0l+d3J+wxsJarR8OV9jSy0Us+buaHI6I3+vEkVw0Fvksm1O\nEQyH+AgCAVJpf8y9XbfVhQNqzQrEh3xNAWlGZ3eDyymbHKyfJkcL5TdXLjnqVlOf\noOpcQqAgZqQIyexziBQmU1ymf1mtQ0jBia+7cXbXAoGBAKQ69rJo5Z7pjKa6HenY\n6ZBATK5JUOsK+9wJizmYjY1Gc6HYcUzE8IVVh0q7jul+LllWjmkSZnel9Mw0t1dd\nL6XDYCcmCWbbd2+K+VfKedmZtNz8B7z5dSxt2PedNo80D9FkRGzJvMUHFoHY3VlE\nplb1+rjRc+Rce+DidPFJLtGX\n-----END PRIVATE KEY-----\n"
+
+
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBxURsNTwPhkMRqviVJ0SD9_MozWlf5iAY",
+  authDomain: "next-aut-username.firebaseapp.com",
+  projectId: "next-aut-username",
+  storageBucket: "next-aut-username.appspot.com",
+  messagingSenderId: "863801089166",
+  appId: "1:863801089166:web:1abf36caf9fb0fa3567ddf"
+};
+
+
+
+
+    code: 'auth/email-already-exists',
+    message: 'The email address is already in use by another account.'

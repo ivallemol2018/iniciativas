@@ -1,0 +1,24 @@
+repo-prefix-types:
+- type: public
+  style: rest
+  exposure: public
+- type: private
+  style: rest
+  exposure: partner
+- type: open
+  style: rest
+  exposure: public
+- type: channel
+  style: rest
+  exposure: internal
+- type: business
+  style: rest
+  exposure: internal
+- type: core
+  style: rest
+  exposure: internal
+- type: data
+  style: rest
+  exposure: internal
+
+    

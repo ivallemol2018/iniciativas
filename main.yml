@@ -1,0 +1,44 @@
+name: Crear carpeta según archivo Excel
+
+on:
+  push:
+    paths:
+      - 'uploads/**.xlsx'
+      - 'uploads/**.xls'
+
+permissions:
+  contents: write
+
+jobs:
+  crear-carpeta:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Configurar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Detectar archivos Excel nuevos/modificados
+        id: detectar
+        run: |
+          FILES=$(git diff --name-only HEAD^ HEAD -- 'uploads/*.xlsx' 'uploads/*.xls' || true)
+          echo "files<<EOF" >> $GITHUB_OUTPUT
+          echo "$FILES" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Ejecutar script centralizado
+        run: |
+          python scripts/crear_archivo.py ${{ steps.detectar.outputs.files }}
+
+      - name: Commit y push de la nueva carpeta
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add .
+          git diff --cached --quiet || git commit -m "Auto: crear carpeta según archivo Excel subido"
+          git push
