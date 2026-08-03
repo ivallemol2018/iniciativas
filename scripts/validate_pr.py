@@ -9,6 +9,8 @@ def comentar_pr(owner,repo, pr_number, token, mensaje):
     headers = {'Authorization': f'token {token}'}
     data = {'body': mensaje}
     response = requests.post(url, headers=headers, json=data)
+    if response.status_code != 201:
+        print(f"[ERROR] Respuesta de GitHub: {response.status_code} - {response.text}")
     response.raise_for_status()
     print("[LOG] Comentario publicado en el PR.")
     
