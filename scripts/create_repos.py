@@ -68,7 +68,7 @@ for repo_info in repo_info_array:
         else:
             template_repo = "api-rest-internal-template-repository"
     else:
-        template-repo = template_map.get(api_style)
+        template_repo = template_map.get(api_style)
         
     
     final_name = repo_name
@@ -82,7 +82,7 @@ for repo_info in repo_info_array:
     
     # --- Creacion de repositorio ---
     print(f"Creando repositorio '{final_name}' desde template '{template_repo}'...")
-    generate_url = f"https://api.github.com/repos/{org_name}/{template-repo}/generate"
+    generate_url = f"https://api.github.com/repos/{org_name}/{template_repo}/generate"
     payload_template = {
         "owner": org_name,
         "name": final_name,
