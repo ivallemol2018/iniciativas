@@ -54,3 +54,26 @@ jobs:
      - name: Instalar dependencias Python
        run: |
          pip install pandas openpyxl requests
+
+  create_repo:
+    name: Crear Repositorio de APIs
+    needs: [validate_pr]
+    runs-on: ubuntu-latest
+    outputs:
+      api_list: ${{ steps.set-outputs.outputs.api_list }}
+    steps:
+     - name: Descargar repo
+       uses: actions/checkout@v4
+       
+     - name: Instalar dependencias Python
+       run: |
+        pip install pandas openpyxl requests
+        
+     - name: Procesar excel
+       run: |
+        python3 scripts/process_excel.py
+       env:
+        GITHUB_TOKEN: ${{ env.ACCESS_TOKEN }}
+        GITHUB_OWNER: ${{ github.repository_owner }}
+        GITHUB_REPO: ${{ github.event.repository.name }}
+        PR_NUMBER: ${{ github.env.pull_request.number }}
