@@ -70,7 +70,7 @@ for _,row in unique_apis.iterrows():
     api_type = str(row['Tipo']).strip()
     api_owner = str(row['Owner']).strip()
     
-    if api_type = 'PQL':
+    if api_type == 'PQL':
         logging.info(f"Saltando API '{api_name}' con tipo 'PQL' (no se debe crear repo).")
         continue # Salta a la siguiente fila 
         
