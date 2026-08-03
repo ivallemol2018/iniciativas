@@ -91,7 +91,7 @@ for repo_info in repo_info_array:
         "include_all_branches": False
     }
     
-    response_template = request.post(generate_url, headers=headers,json=payload_template)
+    response_template = requests.post(generate_url, headers=headers,json=payload_template)
     repo_link= f"https://github.com/{org_name}/{final_name}"
     
     if response_template.status_code == 201:
