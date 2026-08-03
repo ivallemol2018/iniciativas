@@ -22,7 +22,7 @@ if not excel_files:
  logging.error("No se encontro ningun archivo Excel en el directorio actual.")
  sys.exit(1)
 excel_file = excel_files[0]
-logging.info(f"Procesando archivo Excel": {excel_file}")
+logging.info(f"Procesando archivo Excel: {excel_file}")
 
 # Leer el archivo Excel
 df = pd.read_excel(excel_file, engine='openpyxl')
