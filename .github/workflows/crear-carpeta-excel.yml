@@ -64,6 +64,16 @@ jobs:
     steps:
      - name: Descargar repo
        uses: actions/checkout@v4
+
+     - name: Generar token
+       id: generate_token
+       run: |
+        chmod +x scripts/generate_gat.sh
+        ./scripts/generate_gat.sh
+       env:
+        APP_ID: ${{vars.GH_APP_ID_ARCHITECTURE_INITIATIVES }}
+        PRIVATE_KEY: ${{ secrets.GH_APP_PK_ARCHITECTURE_INITIATIVES }}
+        ORGANIZATION: ${{ github.repository_owner }}
        
      - name: Instalar dependencias Python
        run: |
