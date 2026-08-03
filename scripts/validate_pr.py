@@ -6,7 +6,7 @@ import sys
 
 def comentar_pr(owner,repo, pr_number, token, mensaje):
     url = f"https://api.github.com/repos/{owner}/{repo}/issues/{pr_number}/comments"
-    headers = {'Authorization': f'{token}'}
+    headers = {'Authorization': f'token {token}'}
     data = {'body': mensaje}
     response = requests.post(url, headers=headers, json=data)
     response.raise_for_status()
