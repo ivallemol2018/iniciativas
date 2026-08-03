@@ -56,7 +56,32 @@ def get_pr_info():
                 env_file.write(f'INITIATIVE_CODE={title}\n')
                 env_file.write(f'TICKET_CODE={ticket_code if ticket_code else ""}\n')
             print("[LOG] Variable de entorno INITIATIVE_CODE y TICKET_CODE exportadas a GITHUB_ENV")
-        
+            
+        if titulo_valido and ticket_valido:
+            comment_body = (
+                "### Informacion registrada del Pull Request\n"
+                f"- **Titulo del PR:** `{title}`\n"
+                f"- **Rama de origen:** `{branch_name}`\n"
+                f"- **Codigo de ticket de solicitud:** `{ticket_code}`\n"
+                f"- **Fecha de creacion:** `{created_at}`\n"
+                "\n Validaciones correctas."
+            )
+         else:
+            errores = []
+            if not titulo_valido:
+                errores.append("- El titulo no cumple el formato requerido. Ejemplo valido: D-04039")
+            if not ticket_valido:
+                errores.append("- El codigo del ticket no cumple el formato requerido. Ejemplos validos: APIT-6954 o UBAG-123.")
+            comment_body = (
+                "### Errores en el registro del Pull Request\n"
+                f"- **Titulo del PR:** `{title}`\n"
+                f"- **Rama de origen:** `{branch_name}`\n"
+                f"- **Codigo de ticket de solicitud:** `{ticket_code}`\n"
+                f"- **Fecha de creacion:** `{created_at}`\n"
+                "\n" + "\n".join(errores)
+            )
+            
+            comentar_pr(owner, repo, pr_number, token, comment_body)
     except Exception as error:
         print(f"[ERROR] {error}")
         sys.exit(1)
