@@ -87,7 +87,7 @@ for _,row in unique_apis.iterrows():
             'api_exposure': type_info.get('exposure','')
         })
         logging.info(f"Generado nombre de repositorio '{repo_name} para API '{api_name}' (owner: {api_owner})")
-     else:
+    else:
         logging.warning(f"No se pudo generar nombre de repositorio para API '{api_name}' (owner: {api_owner})")
         
 # Guardar en variable de entorno (codificado en base64)
