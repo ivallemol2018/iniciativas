@@ -67,8 +67,6 @@ if [ -z "$access_token" ]; then
 	exit 1
 fi
 
-echo "ACCESS_TOKEN=$access_token"
-
 echo "ACCESS_TOKEN=$access_token" >> $GITHUB_ENV
 
 
