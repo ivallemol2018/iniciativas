@@ -51,14 +51,14 @@ def generate_repo_name(api_name, api_type):
     if prefix == 'API':
         if len(parts) > 1 and parts[1] == 'UX' and api_type == 'UX':
             code = parts[2].lower()
-            name = '-'.json(parts[3:-1]).lower()
+            name = '-'.join(parts[3:-1]).lower()
             return f"channel-{code}-{name}"
         elif len(parts) > 1 and parts[1] == 'BS' and api_type == 'BS':
-            name = '-'.json(parts[2:-1]).lower()
+            name = '-'.join(parts[2:-1]).lower()
             return f"business-{name}"      
     elif prefix == 'AsyncAPI' and api_type == 'Async':
         code = parts[1].lower()
-        name = '-'.json(parts[2:-1]).lower()
+        name = '-'.join(parts[2:-1]).lower()
         return f"asyncapi-{code}-{name}"
     return None
     
