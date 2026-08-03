@@ -33,7 +33,6 @@ def get_pr_info():
         response.raise_for_status()
         pr_data = response.json()
         print("[LOG] PR data obtenida correctamente")
-        print(f"[LOG] Token: {token}")
         
         title = pr_data.get('title', '')
         body = pr_data.get('body', '')
