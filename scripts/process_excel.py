@@ -8,7 +8,7 @@ import yaml
 import base64  # <-- Agregado para codificacion base64
 
 # Configuracion de logs
-logging.basicConfig(level=logging.INFO, format='[LOG] % (message)s')
+logging.basicConfig(level=logging.INFO, format='[LOG] %(message)s')
 
 # Variables de entorno
 token = os.getenv('GITHUB_TOKEN')
