@@ -34,7 +34,7 @@ for col in ['API','Tipo', 'Owner']:
         sys.exit(1)
         
 # Extraer APIs unicas junto con Owner
-unique_apis = df[['API','Tipo','Owner']].drop_duplicate()
+unique_apis = df[['API','Tipo','Owner']].drop_duplicates()
 logging.info(f"Se encontraron {len(unique_apis)} APIs unicas.")
 
 # Leer el archivo YAML de tipos
