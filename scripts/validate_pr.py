@@ -66,7 +66,7 @@ def get_pr_info():
                 f"- **Fecha de creacion:** `{created_at}`\n"
                 "\n Validaciones correctas."
             )
-         else:
+        else:
             errores = []
             if not titulo_valido:
                 errores.append("- El titulo no cumple el formato requerido. Ejemplo valido: D-04039")
@@ -81,7 +81,7 @@ def get_pr_info():
                 "\n" + "\n".join(errores)
             )
             
-            comentar_pr(owner, repo, pr_number, token, comment_body)
+        comentar_pr(owner, repo, pr_number, token, comment_body)
     except Exception as error:
         print(f"[ERROR] {error}")
         sys.exit(1)
