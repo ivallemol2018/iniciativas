@@ -26,11 +26,12 @@ def get_pr_info():
             raise Exception("Faltan variables de entorno necesarias")
             
         url = f"https://api.github.com/repos/{owner}/{repo}/pulls/{pr_number}"
-        headers = {'Authorization': f'{token}'}
+        headers = {'Authorization': f'token {token}'}
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         pr_data = response.json()
         print("[LOG] PR data obtenida correctamente")
+         print(f"[LOG] Token: {token}")
         
         title = pr_data.get('title', '')
         body = pr_data.get('body', '')
