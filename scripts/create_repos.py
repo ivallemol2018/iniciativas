@@ -62,7 +62,7 @@ for repo_info in repo_info_array:
     
     if repo_name_lower.startswith(external_prefixes):
         template_repo = "api-rest-template-repository"
-    elif repo_name_lower.startswith(internal_prefixes)
+    elif repo_name_lower.startswith(internal_prefixes):
         if repo_owner_upper in SCHEMA_PILOT_OWNERS:
             template_repo = "api-rest-template-repository"
         else:
