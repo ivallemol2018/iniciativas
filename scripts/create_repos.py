@@ -112,7 +112,7 @@ for repo_info in repo_info_array:
         })
         continue
         
-     time.sleep(30)   
+    time.sleep(30)  
         
     
     
