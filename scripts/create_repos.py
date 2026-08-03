@@ -87,7 +87,7 @@ for repo_info in repo_info_array:
         "owner": org_name,
         "name": final_name,
         "description": "Repositorio de API",
-        "private": True,
+        "private": False,
         "include_all_branches": False
     }
     
