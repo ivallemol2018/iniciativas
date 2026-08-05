@@ -1,4 +1,5 @@
 import os
+import re
 import sys
 import time
 import base64
@@ -15,7 +16,8 @@ logging.basicConfig(level=logging.INFO, format='[LOG] %(message)s')
 TOKEN = os.getenv('GITHUB_TOKEN')
 ORG = os.getenv('GITHUB_OWNER')
 
-SPEC_PATH_TEMPLATE = 'api/nombre_repositorio.yaml'
+SPEC_SOURCE_PATH = 'api/nombre_repositorio.yaml'
+SPEC_TARGET_TEMPLATE = 'api/{repo}.yaml'
 REQUIRED_COLUMNS = ['API', 'Tipo', 'Owner', 'Metodo', 'Endpoint', 'Descripcion del Endpoint']
 
 HEADERS = {
@@ -66,6 +68,51 @@ def construir_paths(filas, tag):
     return paths
 
 
+def escalar_yaml(texto: str) -> str:
+    """Escapa un valor para insertarlo como scalar plano de una linea en YAML.
+
+    La plantilla usa placeholders sin comillas como '[NOMBRE-CONTROLADOR]', que no son
+    YAML valido (se interpretan como flow sequence). Por eso el archivo no se puede
+    parsear completo con yaml.safe_load y las sustituciones se hacen sobre texto.
+    """
+    if re.search(r'[:#{}\[\],&*!|>\'"%@`\n]', texto) or texto != texto.strip():
+        escapado = texto.replace('\\', '\\\\').replace('"', '\\"')
+        return f'"{escapado}"'
+    return texto
+
+
+def reemplazar_info(contenido: str, title: str, version: str) -> str:
+    title_esc = escalar_yaml(title)
+    contenido, n_title = re.subn(r'(?m)^(\s*title:\s*).*$', lambda m: m.group(1) + title_esc, contenido, count=1)
+    contenido, n_version = re.subn(r'(?m)^(\s*version:\s*).*$', lambda m: m.group(1) + version, contenido, count=1)
+    if not n_title or not n_version:
+        raise ValueError("No se encontraron las claves 'title'/'version' bajo 'info' en la plantilla.")
+    return contenido
+
+
+def reemplazar_tags(contenido: str, tag: str) -> str:
+    tag_esc = escalar_yaml(tag)
+    descripcion_esc = escalar_yaml(f'{tag} Controller')
+    patron = re.compile(r'(?m)^tags:\n(\s*-\s*name:\s*).*\n(\s*description:\s*).*$')
+    nuevo, n = patron.subn(lambda m: f"tags:\n{m.group(1)}{tag_esc}\n{m.group(2)}{descripcion_esc}", contenido, count=1)
+    if not n:
+        raise ValueError("No se encontro el bloque 'tags' en la plantilla.")
+    return nuevo
+
+
+def reemplazar_paths(contenido: str, paths: dict) -> str:
+    if paths:
+        fragmento = yaml.safe_dump(paths, sort_keys=False, allow_unicode=True, default_flow_style=False)
+        bloque = '\n'.join('  ' + linea if linea else linea for linea in fragmento.splitlines())
+        reemplazo = 'paths:\n' + bloque + '\n'
+    else:
+        reemplazo = 'paths: {}\n'
+    nuevo, n = re.subn(r'(?ms)^paths:.*\Z', lambda m: reemplazo, contenido, count=1)
+    if not n:
+        raise ValueError("No se encontro la clave 'paths' en la plantilla.")
+    return nuevo
+
+
 def obtener_archivo(repo, path):
     url = f"https://api.github.com/repos/{ORG}/{repo}/contents/{path}"
     for intento in range(3):
@@ -83,18 +130,31 @@ def obtener_archivo(repo, path):
     return None, None
 
 
-def actualizar_archivo(repo, path, contenido_yaml, sha, mensaje):
+def crear_archivo(repo, path, contenido_yaml, mensaje):
     url = f"https://api.github.com/repos/{ORG}/{repo}/contents/{path}"
     payload = {
         'message': mensaje,
         'content': base64.b64encode(contenido_yaml.encode('utf-8')).decode('utf-8'),
-        'sha': sha,
     }
     response = requests.put(url, headers=HEADERS, json=payload)
     if response.status_code not in (200, 201):
-        logging.error(f"No se pudo actualizar '{path}' en '{repo}': {response.status_code} - {response.text}")
+        logging.error(f"No se pudo crear '{path}' en '{repo}': {response.status_code} - {response.text}")
         return False
-    logging.info(f"Especificacion OpenAPI actualizada en '{repo}'.")
+    logging.info(f"Especificacion OpenAPI creada en '{repo}/{path}'.")
+    return True
+
+
+def eliminar_archivo(repo, path, sha, mensaje):
+    url = f"https://api.github.com/repos/{ORG}/{repo}/contents/{path}"
+    payload = {
+        'message': mensaje,
+        'sha': sha,
+    }
+    response = requests.delete(url, headers=HEADERS, json=payload)
+    if response.status_code not in (200,):
+        logging.error(f"No se pudo eliminar '{path}' en '{repo}': {response.status_code} - {response.text}")
+        return False
+    logging.info(f"Plantilla '{path}' eliminada de '{repo}'.")
     return True
 
 
@@ -121,20 +181,24 @@ def main():
 
         repo = parsed['repo_name']
         tag = controller_name(parsed['name_part'])
-        spec_path = SPEC_PATH_TEMPLATE.format(repo=repo)
+        destino = SPEC_TARGET_TEMPLATE.format(repo=repo)
 
-        contenido, sha = obtener_archivo(repo, spec_path)
+        contenido, sha = obtener_archivo(repo, SPEC_SOURCE_PATH)
         if contenido is None:
             continue
 
-        spec = yaml.safe_load(contenido)
-        spec['info']['title'] = str(api_name).strip()
-        spec['info']['version'] = '1.0.0'
-        spec['tags'] = [{'name': tag, 'description': f'{tag} Controller'}]
-        spec['paths'] = construir_paths(grupo, tag)
+        try:
+            nuevo_contenido = reemplazar_info(contenido, str(api_name).strip(), '1.0.0')
+            nuevo_contenido = reemplazar_tags(nuevo_contenido, tag)
+            nuevo_contenido = reemplazar_paths(nuevo_contenido, construir_paths(grupo, tag))
+        except ValueError as error:
+            logging.error(f"No se pudo actualizar la especificacion de '{repo}': {error}")
+            continue
 
-        nuevo_contenido = yaml.dump(spec, sort_keys=False, allow_unicode=True)
-        actualizar_archivo(repo, spec_path, nuevo_contenido, sha, f"chore: actualizar especificacion OpenAPI de {repo}")
+        if not crear_archivo(repo, destino, nuevo_contenido, f"chore: crear especificacion OpenAPI {destino}"):
+            continue
+
+        eliminar_archivo(repo, SPEC_SOURCE_PATH, sha, f"chore: eliminar plantilla {SPEC_SOURCE_PATH}")
 
 
 if __name__ == '__main__':
