@@ -168,7 +168,6 @@ def construir_parametros_header(api_type: str) -> list:
 
 
 def construir_paths(filas, tag, api_type) -> dict:
-    parametros = construir_parametros_header(api_type)
     paths = {}
     for _, fila in filas.iterrows():
         endpoint = str(fila['Endpoint']).strip()
@@ -180,6 +179,7 @@ def construir_paths(filas, tag, api_type) -> dict:
             'tags': [tag],
             'summary': descripcion,
         }
+        parametros = construir_parametros_header(api_type)
         if parametros:
             operacion['parameters'] = parametros
         operacion['responses'] = {'200': {'description': 'OK'}}
