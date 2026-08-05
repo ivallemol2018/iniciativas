@@ -22,7 +22,21 @@ REQUIRED_COLUMNS = ['API', 'Estilo', 'Tipo', 'Owner', 'Metodo', 'Endpoint', 'Des
 
 METODO_A_OPERACION_ASYNC = {
     'send': 'publish',
-    'receive': 'subscribe'
+    'publish': 'publish',
+    'receive': 'subscribe',
+    'subscribe': 'subscribe',
+}
+
+HEADERS_INTERNOS = ['Authorization', 'Request-ID', 'request-data', 'app-code', 'caller-name', 'Ocp-Apim-Subscription-Key']
+HEADERS_UX = ['Authorization', 'Ocp-Apim-Subscription-Key']
+HEADERS_PV = ['Authorization', 'subscription-key']
+
+HEADERS_REQUERIDOS_POR_TIPO = {
+    'BS': HEADERS_INTERNOS,
+    'CR': HEADERS_INTERNOS,
+    'DATA': HEADERS_INTERNOS,
+    'UX': HEADERS_UX,
+    'PV': HEADERS_PV,
 }
 
 HEADERS = {
@@ -145,7 +159,16 @@ def reemplazar_bloque_indentado(contenido: str, clave: str, datos: dict, vacio: 
 
 # --- REST / OpenAPI -----------------------------------------------------
 
-def construir_paths(filas, tag) -> dict:
+def construir_parametros_header(api_type: str) -> list:
+    headers = HEADERS_REQUERIDOS_POR_TIPO.get(api_type.strip().upper(), [])
+    return [
+        {'name': header, 'in': 'header', 'required': True, 'schema': {'type': 'string'}}
+        for header in headers
+    ]
+
+
+def construir_paths(filas, tag, api_type) -> dict:
+    parametros = construir_parametros_header(api_type)
     paths = {}
     for _, fila in filas.iterrows():
         endpoint = str(fila['Endpoint']).strip()
@@ -153,13 +176,14 @@ def construir_paths(filas, tag) -> dict:
         descripcion = str(fila['Descripcion del Endpoint']).strip()
         if not endpoint or not metodo:
             continue
-        paths.setdefault(endpoint, {})[metodo] = {
+        operacion = {
             'tags': [tag],
             'summary': descripcion,
-            'responses': {
-                '200': {'description': 'OK'},
-            },
         }
+        if parametros:
+            operacion['parameters'] = parametros
+        operacion['responses'] = {'200': {'description': 'OK'}}
+        paths.setdefault(endpoint, {})[metodo] = operacion
     return paths
 
 
@@ -180,7 +204,7 @@ def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
     nuevo = reemplazar_tags_rest(nuevo, tag)
     nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-type', api_type)
     nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-id', slug(tag))
-    nuevo = reemplazar_bloque_indentado(nuevo, 'paths', construir_paths(grupo, tag))
+    nuevo = reemplazar_bloque_indentado(nuevo, 'paths', construir_paths(grupo, tag, api_type))
     return nuevo
 
 
