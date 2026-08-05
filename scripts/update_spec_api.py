@@ -73,6 +73,10 @@ def operation_id(accion: str, endpoint: str) -> str:
     return accion + ''.join(piezas)
 
 
+def slug(texto: str) -> str:
+    return texto.strip().lower().replace(' ', '-')
+
+
 def reemplazar_info(contenido: str, title: str, version: str) -> str:
     title_esc = escalar_yaml(title)
     contenido, n_title = re.subn(r'(?m)^(\s*title:\s*).*$', lambda m: m.group(1) + title_esc, contenido, count=1)
@@ -175,7 +179,7 @@ def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
     nuevo = reemplazar_info(contenido, api_name, '1.0.0')
     nuevo = reemplazar_tags_rest(nuevo, tag)
     nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-type', api_type)
-    nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-id', tag)
+    nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-id', slug(tag))
     nuevo = reemplazar_bloque_indentado(nuevo, 'paths', construir_paths(grupo, tag))
     return nuevo
 
