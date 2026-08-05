@@ -6,6 +6,7 @@ import requests
 import logging
 import yaml
 import base64  # <-- Agregado para codificacion base64
+from repo_naming import generate_repo_name
 
 # Configuracion de logs
 logging.basicConfig(level=logging.INFO, format='[LOG] %(message)s')
@@ -41,27 +42,6 @@ logging.info(f"Se encontraron {len(unique_apis)} APIs unicas.")
 with open('scripts/api_types.yaml','r') as f:
     yaml_data = yaml.safe_load(f)
 type_map = {item['type']:item for item in yaml_data['repo-prefix-types']}    
-
-# Funcion para generar el nombre de repositorio
-def generate_repo_name(api_name, api_type):
-    parts = api_name.split()
-    if not parts:
-        return None
-    prefix = parts[0]
-    if prefix == 'API':
-        if len(parts) > 1 and parts[1] == 'UX' and api_type == 'UX':
-            code = parts[2].lower()
-            name = '-'.join(parts[3:-1]).lower()
-            return f"channel-{code}-{name}"
-        elif len(parts) > 1 and parts[1] == 'BS' and api_type == 'BS':
-            name = '-'.join(parts[2:-1]).lower()
-            return f"business-{name}"      
-    elif prefix == 'AsyncAPI' and api_type == 'Async':
-        code = parts[1].lower()
-        name = '-'.join(parts[2:-1]).lower()
-        return f"asyncapi-{code}-{name}"
-    return None
-    
 
 # Generar nombre de repositorio y enriquecer la lista
 repo_list = []
