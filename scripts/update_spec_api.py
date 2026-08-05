@@ -18,7 +18,12 @@ ORG = os.getenv('GITHUB_OWNER')
 
 SPEC_SOURCE_PATH = 'api/nombre_repositorio.yaml'
 SPEC_TARGET_TEMPLATE = 'api/{repo}.yaml'
-REQUIRED_COLUMNS = ['API', 'Tipo', 'Owner', 'Metodo', 'Endpoint', 'Descripcion del Endpoint']
+REQUIRED_COLUMNS = ['API', 'Estilo', 'Tipo', 'Owner', 'Metodo', 'Endpoint', 'Descripcion del Endpoint']
+
+METODO_A_OPERACION_ASYNC = {
+    'send': 'publish',
+    'receive': 'subscribe'
+}
 
 HEADERS = {
     "Authorization": f"Bearer {TOKEN}",
@@ -50,7 +55,63 @@ def cargar_excel():
     return df
 
 
-def construir_paths(filas, tag):
+def escalar_yaml(texto: str) -> str:
+    """Escapa un valor para insertarlo como scalar plano de una linea en YAML.
+
+    Las plantillas usan placeholders sin comillas como '[NOMBRE-CONTROLADOR]', que no
+    son YAML valido (se interpretan como flow sequence). Por eso los archivos no se
+    pueden parsear completos con yaml.safe_load y las sustituciones se hacen sobre texto.
+    """
+    if re.search(r'[:#{}\[\],&*!|>\'"%@`\n]', texto) or texto != texto.strip():
+        escapado = texto.replace('\\', '\\\\').replace('"', '\\"')
+        return f'"{escapado}"'
+    return texto
+
+
+def operation_id(accion: str, endpoint: str) -> str:
+    piezas = [p.capitalize() for p in re.split(r'[\/\-_.\s{}]+', endpoint) if p]
+    return accion + ''.join(piezas)
+
+
+def reemplazar_info(contenido: str, title: str, version: str) -> str:
+    title_esc = escalar_yaml(title)
+    contenido, n_title = re.subn(r'(?m)^(\s*title:\s*).*$', lambda m: m.group(1) + title_esc, contenido, count=1)
+    contenido, n_version = re.subn(r'(?m)^(\s*version:\s*).*$', lambda m: m.group(1) + version, contenido, count=1)
+    if not n_title or not n_version:
+        raise ValueError("No se encontraron las claves 'title'/'version' bajo 'info' en la plantilla.")
+    return contenido
+
+
+def reemplazar_bloque_indentado(contenido: str, clave: str, cuerpo_yaml: str) -> str:
+    """Reemplaza el valor de una clave de nivel raiz junto con todo su bloque indentado.
+
+    Necesario porque, a diferencia de 'paths' en la plantilla REST (que queda al final
+    del archivo), 'channels' en la plantilla AsyncAPI tiene contenido despues (tags,
+    components), asi que no se puede reemplazar todo hasta el final del archivo.
+    """
+    lineas = contenido.split('\n')
+    inicio = None
+    fin = None
+    for i, linea in enumerate(lineas):
+        if linea.startswith(f'{clave}:'):
+            inicio = i
+            fin = i + 1
+            for j in range(i + 1, len(lineas)):
+                siguiente = lineas[j]
+                if siguiente.strip() == '' or siguiente[:1] in (' ', '\t'):
+                    fin = j + 1
+                    continue
+                break
+            break
+    if inicio is None:
+        raise ValueError(f"No se encontro la clave '{clave}' en la plantilla.")
+    nuevas = lineas[:inicio] + [f'{clave}:'] + cuerpo_yaml.rstrip('\n').split('\n') + lineas[fin:]
+    return '\n'.join(nuevas)
+
+
+# --- REST / OpenAPI -----------------------------------------------------
+
+def construir_paths(filas, tag) -> dict:
     paths = {}
     for _, fila in filas.iterrows():
         endpoint = str(fila['Endpoint']).strip()
@@ -68,35 +129,13 @@ def construir_paths(filas, tag):
     return paths
 
 
-def escalar_yaml(texto: str) -> str:
-    """Escapa un valor para insertarlo como scalar plano de una linea en YAML.
-
-    La plantilla usa placeholders sin comillas como '[NOMBRE-CONTROLADOR]', que no son
-    YAML valido (se interpretan como flow sequence). Por eso el archivo no se puede
-    parsear completo con yaml.safe_load y las sustituciones se hacen sobre texto.
-    """
-    if re.search(r'[:#{}\[\],&*!|>\'"%@`\n]', texto) or texto != texto.strip():
-        escapado = texto.replace('\\', '\\\\').replace('"', '\\"')
-        return f'"{escapado}"'
-    return texto
-
-
-def reemplazar_info(contenido: str, title: str, version: str) -> str:
-    title_esc = escalar_yaml(title)
-    contenido, n_title = re.subn(r'(?m)^(\s*title:\s*).*$', lambda m: m.group(1) + title_esc, contenido, count=1)
-    contenido, n_version = re.subn(r'(?m)^(\s*version:\s*).*$', lambda m: m.group(1) + version, contenido, count=1)
-    if not n_title or not n_version:
-        raise ValueError("No se encontraron las claves 'title'/'version' bajo 'info' en la plantilla.")
-    return contenido
-
-
-def reemplazar_tags(contenido: str, tag: str) -> str:
+def reemplazar_tags_rest(contenido: str, tag: str) -> str:
     tag_esc = escalar_yaml(tag)
     descripcion_esc = escalar_yaml(f'{tag} Controller')
     patron = re.compile(r'(?m)^tags:\n(\s*-\s*name:\s*).*\n(\s*description:\s*).*$')
     nuevo, n = patron.subn(lambda m: f"tags:\n{m.group(1)}{tag_esc}\n{m.group(2)}{descripcion_esc}", contenido, count=1)
     if not n:
-        raise ValueError("No se encontro el bloque 'tags' en la plantilla.")
+        raise ValueError("No se encontro el bloque 'tags' en la plantilla REST.")
     return nuevo
 
 
@@ -109,9 +148,65 @@ def reemplazar_paths(contenido: str, paths: dict) -> str:
         reemplazo = 'paths: {}\n'
     nuevo, n = re.subn(r'(?ms)^paths:.*\Z', lambda m: reemplazo, contenido, count=1)
     if not n:
-        raise ValueError("No se encontro la clave 'paths' en la plantilla.")
+        raise ValueError("No se encontro la clave 'paths' en la plantilla REST.")
     return nuevo
 
+
+def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
+    nuevo = reemplazar_info(contenido, api_name, '1.0.0')
+    nuevo = reemplazar_tags_rest(nuevo, tag)
+    nuevo = reemplazar_paths(nuevo, construir_paths(grupo, tag))
+    return nuevo
+
+
+# --- Event-Driven / AsyncAPI ---------------------------------------------
+
+def construir_channels(filas, tag) -> dict:
+    channels = {}
+    for _, fila in filas.iterrows():
+        topic = str(fila['Endpoint']).strip()
+        metodo = str(fila['Metodo']).strip().lower()
+        descripcion = str(fila['Descripcion del Endpoint']).strip()
+        if not topic or not metodo:
+            continue
+        operacion = METODO_A_OPERACION_ASYNC.get(metodo)
+        if not operacion:
+            logging.warning(f"Metodo '{metodo}' no reconocido para el topic '{topic}' (se esperaba Send/Receive). Fila omitida.")
+            continue
+        canal = channels.setdefault(topic, {'description': descripcion})
+        canal[operacion] = {
+            'operationId': operation_id(operacion, topic),
+            'description': descripcion,
+        }
+    return channels
+
+
+def reemplazar_tags_async(contenido: str, tag: str) -> str:
+    tag_esc = escalar_yaml(tag)
+    patron = re.compile(r'(?m)^tags:\n(\s*-\s*name:\s*).*$')
+    nuevo, n = patron.subn(lambda m: f"tags:\n{m.group(1)}{tag_esc}", contenido, count=1)
+    if not n:
+        raise ValueError("No se encontro el bloque 'tags' en la plantilla AsyncAPI.")
+    return nuevo
+
+
+def reemplazar_channels(contenido: str, channels: dict) -> str:
+    if channels:
+        fragmento = yaml.safe_dump(channels, sort_keys=False, allow_unicode=True, default_flow_style=False)
+        bloque = '\n'.join('  ' + linea if linea else linea for linea in fragmento.splitlines())
+    else:
+        bloque = '  {}'
+    return reemplazar_bloque_indentado(contenido, 'channels', bloque)
+
+
+def procesar_event_driven(contenido: str, api_name: str, tag: str, grupo) -> str:
+    nuevo = reemplazar_info(contenido, api_name, '1.0.0')
+    nuevo = reemplazar_tags_async(nuevo, tag)
+    nuevo = reemplazar_channels(nuevo, construir_channels(grupo, tag))
+    return nuevo
+
+
+# --- GitHub Contents API --------------------------------------------------
 
 def obtener_archivo(repo, path):
     url = f"https://api.github.com/repos/{ORG}/{repo}/contents/{path}"
@@ -141,7 +236,7 @@ def crear_archivo(repo, path, contenido_yaml, mensaje):
     if response.status_code not in (200, 201):
         logging.error(f"No se pudo crear '{path}' en '{repo}': {response.status_code} - {response.text}")
         return False
-    logging.info(f"Especificacion OpenAPI creada en '{repo}/{path}'.")
+    logging.info(f"Especificacion de API creada en '{repo}/{path}'.")
     return True
 
 
@@ -183,20 +278,25 @@ def main():
         repo = parsed['repo_name']
         tag = controller_name(parsed['name_part'])
         destino = SPEC_TARGET_TEMPLATE.format(repo=repo)
+        estilo = str(grupo.iloc[0]['Estilo']).strip().lower()
 
         contenido, sha = obtener_archivo(repo, SPEC_SOURCE_PATH)
         if contenido is None:
             continue
 
         try:
-            nuevo_contenido = reemplazar_info(contenido, str(api_name).strip(), '1.0.0')
-            nuevo_contenido = reemplazar_tags(nuevo_contenido, tag)
-            nuevo_contenido = reemplazar_paths(nuevo_contenido, construir_paths(grupo, tag))
+            if estilo == 'rest':
+                nuevo_contenido = procesar_rest(contenido, str(api_name).strip(), tag, grupo)
+            elif estilo == 'event-driven':
+                nuevo_contenido = procesar_event_driven(contenido, str(api_name).strip(), tag, grupo)
+            else:
+                logging.warning(f"Estilo '{estilo}' no soportado para '{repo}'. Se omite.")
+                continue
         except ValueError as error:
             logging.error(f"No se pudo actualizar la especificacion de '{repo}': {error}")
             continue
 
-        if not crear_archivo(repo, destino, nuevo_contenido, f"chore: crear especificacion OpenAPI {destino}"):
+        if not crear_archivo(repo, destino, nuevo_contenido, f"chore: crear especificacion de API {destino}"):
             continue
 
         eliminar_archivo(repo, SPEC_SOURCE_PATH, sha, f"chore: eliminar plantilla {SPEC_SOURCE_PATH}")
