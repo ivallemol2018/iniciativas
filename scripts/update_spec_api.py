@@ -82,30 +82,51 @@ def reemplazar_info(contenido: str, title: str, version: str) -> str:
     return contenido
 
 
-def reemplazar_bloque_indentado(contenido: str, clave: str, cuerpo_yaml: str) -> str:
-    """Reemplaza el valor de una clave de nivel raiz junto con todo su bloque indentado.
+def encontrar_bloque(lineas: list, clave: str):
+    """Ubica una clave 'clave:' (a cualquier nivel de indentacion) y el rango de lineas
+    de su bloque hijo, comparando indentacion en vez de asumir que es una clave raiz o
+    que su contenido llega hasta el final del archivo."""
+    patron = re.compile(rf'^(\s*){re.escape(clave)}:\s*$')
+    for i, linea in enumerate(lineas):
+        m = patron.match(linea)
+        if not m:
+            continue
+        indent = len(m.group(1))
+        fin = i + 1
+        for j in range(i + 1, len(lineas)):
+            siguiente = lineas[j]
+            if siguiente.strip() == '':
+                fin = j + 1
+                continue
+            indent_siguiente = len(siguiente) - len(siguiente.lstrip(' \t'))
+            if indent_siguiente > indent:
+                fin = j + 1
+                continue
+            break
+        return i, fin, indent
+    return None
 
-    Necesario porque, a diferencia de 'paths' en la plantilla REST (que queda al final
-    del archivo), 'channels' en la plantilla AsyncAPI tiene contenido despues (tags,
-    components), asi que no se puede reemplazar todo hasta el final del archivo.
+
+def reemplazar_bloque_indentado(contenido: str, clave: str, datos: dict, vacio: str = '{}') -> str:
+    """Regenera por completo el bloque hijo de 'clave' a partir de un dict, sin importar
+    su indentacion ni si tiene contenido despues (a diferencia de 'paths' en la plantilla
+    REST, 'channels'/'messages' en la de AsyncAPI no quedan al final del archivo).
+
+    Regenerar desde el dict (en vez de duplicar texto ya existente en el archivo) es lo
+    que hace esto idempotente ante reruns del workflow (ej. push adicional al PR).
     """
     lineas = contenido.split('\n')
-    inicio = None
-    fin = None
-    for i, linea in enumerate(lineas):
-        if linea.startswith(f'{clave}:'):
-            inicio = i
-            fin = i + 1
-            for j in range(i + 1, len(lineas)):
-                siguiente = lineas[j]
-                if siguiente.strip() == '' or siguiente[:1] in (' ', '\t'):
-                    fin = j + 1
-                    continue
-                break
-            break
-    if inicio is None:
+    encontrado = encontrar_bloque(lineas, clave)
+    if not encontrado:
         raise ValueError(f"No se encontro la clave '{clave}' en la plantilla.")
-    nuevas = lineas[:inicio] + [f'{clave}:'] + cuerpo_yaml.rstrip('\n').split('\n') + lineas[fin:]
+    inicio, fin, indent = encontrado
+    prefijo_hijo = ' ' * (indent + 2)
+    if datos:
+        fragmento = yaml.safe_dump(datos, sort_keys=False, allow_unicode=True, default_flow_style=False)
+        cuerpo = [prefijo_hijo + linea if linea else linea for linea in fragmento.splitlines()]
+    else:
+        cuerpo = [prefijo_hijo + vacio]
+    nuevas = lineas[:inicio] + [f"{' ' * indent}{clave}:"] + cuerpo + lineas[fin:]
     return '\n'.join(nuevas)
 
 
@@ -139,32 +160,25 @@ def reemplazar_tags_rest(contenido: str, tag: str) -> str:
     return nuevo
 
 
-def reemplazar_paths(contenido: str, paths: dict) -> str:
-    if paths:
-        fragmento = yaml.safe_dump(paths, sort_keys=False, allow_unicode=True, default_flow_style=False)
-        bloque = '\n'.join('  ' + linea if linea else linea for linea in fragmento.splitlines())
-        reemplazo = 'paths:\n' + bloque + '\n'
-    else:
-        reemplazo = 'paths: {}\n'
-    nuevo, n = re.subn(r'(?ms)^paths:.*\Z', lambda m: reemplazo, contenido, count=1)
-    if not n:
-        raise ValueError("No se encontro la clave 'paths' en la plantilla REST.")
-    return nuevo
-
-
 def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
     nuevo = reemplazar_info(contenido, api_name, '1.0.0')
     nuevo = reemplazar_tags_rest(nuevo, tag)
-    nuevo = reemplazar_paths(nuevo, construir_paths(grupo, tag))
+    nuevo = reemplazar_bloque_indentado(nuevo, 'paths', construir_paths(grupo, tag))
     return nuevo
 
 
 # --- Event-Driven / AsyncAPI ---------------------------------------------
 
+def extraer_topic(endpoint: str) -> str:
+    """El Excel trae el Endpoint como 'topic: nombre_topico'; nos quedamos solo con el nombre."""
+    match = re.match(r'(?i)^\s*topic\s*:\s*(.+)$', endpoint)
+    return match.group(1).strip() if match else endpoint.strip()
+
+
 def construir_channels(filas, tag) -> dict:
     channels = {}
     for _, fila in filas.iterrows():
-        topic = str(fila['Endpoint']).strip()
+        topic = extraer_topic(str(fila['Endpoint']))
         metodo = str(fila['Metodo']).strip().lower()
         descripcion = str(fila['Descripcion del Endpoint']).strip()
         if not topic or not metodo:
@@ -177,8 +191,33 @@ def construir_channels(filas, tag) -> dict:
         canal[operacion] = {
             'operationId': operation_id(operacion, topic),
             'description': descripcion,
+            'message': {'$ref': f'#/components/messages/{topic}'},
         }
     return channels
+
+
+def construir_mensaje(topic: str, owner: str) -> dict:
+    """Replica la entrada de ejemplo 'messageName' de la plantilla, una por topic,
+    sustituyendo CODEAPP (Owner del Excel) y TOPIC-NAME-VALUE (topic + '-value')."""
+    value_name = f'{topic}-value'
+    return {
+        'name': topic,
+        'title': 'Message title (Evento)',
+        'contentType': 'avro/binary',
+        'schemaFormat': 'application/vnd.apache.avro;version=1.9.0',
+        'summary': 'Summary',
+        'traits': [{'$ref': '#/components/messageTraits/commonHeaders'}],
+        'payload': {'$ref': f'../schema/{owner}/{value_name}.avsc'},
+        'example': [{
+            'name': 'Example name',
+            'summary': 'Summary',
+            'payload': {'$ref': f'../schemas/{owner}/mocks/{value_name}-example-01.json'},
+        }],
+    }
+
+
+def construir_messages(topics, owner: str) -> dict:
+    return {topic: construir_mensaje(topic, owner) for topic in topics}
 
 
 def reemplazar_tags_async(contenido: str, tag: str) -> str:
@@ -190,19 +229,14 @@ def reemplazar_tags_async(contenido: str, tag: str) -> str:
     return nuevo
 
 
-def reemplazar_channels(contenido: str, channels: dict) -> str:
-    if channels:
-        fragmento = yaml.safe_dump(channels, sort_keys=False, allow_unicode=True, default_flow_style=False)
-        bloque = '\n'.join('  ' + linea if linea else linea for linea in fragmento.splitlines())
-    else:
-        bloque = '  {}'
-    return reemplazar_bloque_indentado(contenido, 'channels', bloque)
-
-
 def procesar_event_driven(contenido: str, api_name: str, tag: str, grupo) -> str:
+    owner = str(grupo.iloc[0]['Owner']).strip()
+    channels = construir_channels(grupo, tag)
+
     nuevo = reemplazar_info(contenido, api_name, '1.0.0')
     nuevo = reemplazar_tags_async(nuevo, tag)
-    nuevo = reemplazar_channels(nuevo, construir_channels(grupo, tag))
+    nuevo = reemplazar_bloque_indentado(nuevo, 'channels', channels)
+    nuevo = reemplazar_bloque_indentado(nuevo, 'messages', construir_messages(channels.keys(), owner))
     return nuevo
 
 
