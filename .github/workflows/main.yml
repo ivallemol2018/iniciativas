@@ -100,3 +100,11 @@ jobs:
         INITIATIVE_CODE: ${{ needs.validate_pr.outputs.initiative_code }}
        run: |
         python3 scripts/create_repos.py
+
+     - name: Actualizar especificacion OpenAPI
+       if: ${{ env.REPOS_TO_CREATE != 'W10=' && env.REPOS_TO_CREATE != '' }}
+       env:
+        GITHUB_TOKEN: ${{ env.ACCESS_TOKEN }}
+        GITHUB_OWNER: ${{ github.repository_owner }}
+       run: |
+        python3 scripts/update_openapi_spec.py
