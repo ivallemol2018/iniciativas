@@ -15,7 +15,7 @@ logging.basicConfig(level=logging.INFO, format='[LOG] %(message)s')
 TOKEN = os.getenv('GITHUB_TOKEN')
 ORG = os.getenv('GITHUB_OWNER')
 
-SPEC_PATH_TEMPLATE = 'template/api/{repo}.yaml'
+SPEC_PATH_TEMPLATE = 'api/nombre_repositorio.yaml'
 REQUIRED_COLUMNS = ['API', 'Tipo', 'Owner', 'Metodo', 'Endpoint', 'Descripcion del Endpoint']
 
 HEADERS = {
