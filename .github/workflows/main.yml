@@ -77,7 +77,7 @@ jobs:
        
      - name: Instalar dependencias Python
        run: |
-        pip install pandas openpyxl requests
+        pip install pandas openpyxl requests pyyaml
         
      - name: Procesar excel
        run: |
