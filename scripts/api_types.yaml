@@ -20,5 +20,14 @@ repo-prefix-types:
 - type: data
   style: rest
   exposure: internal
+- type: graph
+  style: graphql
+  exposure: internal
+- type: subgraph
+  style: graphql
+  exposure: internal
+- type: asyncapi
+  style: event-driven
+  exposure: internal
 
     
