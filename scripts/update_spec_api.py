@@ -82,6 +82,15 @@ def reemplazar_info(contenido: str, title: str, version: str) -> str:
     return contenido
 
 
+def reemplazar_clave_simple(contenido: str, clave: str, valor: str) -> str:
+    valor_esc = escalar_yaml(valor)
+    patron = re.compile(rf'(?m)^(\s*{re.escape(clave)}:\s*).*$')
+    nuevo, n = patron.subn(lambda m: m.group(1) + valor_esc, contenido, count=1)
+    if not n:
+        raise ValueError(f"No se encontro la clave '{clave}' en la plantilla.")
+    return nuevo
+
+
 def encontrar_bloque(lineas: list, clave: str):
     """Ubica una clave 'clave:' (a cualquier nivel de indentacion) y el rango de lineas
     de su bloque hijo, comparando indentacion en vez de asumir que es una clave raiz o
@@ -161,8 +170,12 @@ def reemplazar_tags_rest(contenido: str, tag: str) -> str:
 
 
 def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
+    api_type = str(grupo.iloc[0]['Tipo']).strip()
+
     nuevo = reemplazar_info(contenido, api_name, '1.0.0')
     nuevo = reemplazar_tags_rest(nuevo, tag)
+    nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-type', api_type)
+    nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-id', tag)
     nuevo = reemplazar_bloque_indentado(nuevo, 'paths', construir_paths(grupo, tag))
     return nuevo
 
