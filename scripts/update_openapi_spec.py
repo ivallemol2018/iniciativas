@@ -120,6 +120,7 @@ def obtener_archivo(repo, path):
         if response.status_code == 200:
             data = response.json()
             contenido = base64.b64decode(data['content']).decode('utf-8')
+            contenido = contenido.replace('\r\n', '\n').replace('\r', '\n')
             return contenido, data['sha']
         if response.status_code == 404 and intento < 2:
             logging.info(f"'{path}' aun no disponible en '{repo}', reintentando...")
