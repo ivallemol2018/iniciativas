@@ -9,17 +9,24 @@ def parse_api_name(api_name: str, api_type: str) -> dict | None:
     prefix = parts[0]
 
     if prefix == 'API':
-        if len(parts) > 2 and parts[1] == 'UX' and api_type == 'UX':
+        if len(parts) > 1 and parts[1] == 'UX' and api_type == 'UX':
             code = parts[2].lower()
             name = '-'.join(parts[3:-1]).lower()
             if not name:
                 return None
             return {'repo_name': f"channel-{code}-{name}", 'name_part': name}
-        if len(parts) > 2 and parts[1] == 'BS' and api_type == 'BS':
+        elif len(parts) > 1 and parts[1] == 'BS' and api_type == 'BS':
             name = '-'.join(parts[2:-1]).lower()
             if not name:
                 return None
             return {'repo_name': f"business-{name}", 'name_part': name}
+        elif len(parts) > 1 and parts[1] == 'PV' and api_type == 'PV':
+            code = parts[2].lower()
+            name = '-'.join(parts[3:-1]).lower()
+            if not name:
+                return None
+            return {'repo_name': f"private-{code}-{name}", 'name_part': name}
+
     elif prefix == 'AsyncAPI' and api_type == 'Async':
         if len(parts) > 2:
             code = parts[1].lower()
