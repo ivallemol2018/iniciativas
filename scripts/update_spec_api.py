@@ -39,6 +39,162 @@ HEADERS_REQUERIDOS_POR_TIPO = {
     'PV': HEADERS_PV,
 }
 
+# Componentes de error estandar que se agregan a toda especificacion REST generada,
+# para que cada endpoint pueda referenciar '500'/'504' contra un mismo contrato de error.
+COMPONENTES_ERROR = {
+    'responses': {
+        'InternalServerError': {
+            'description': 'El servicio lanzo algun error. Por favor contactarse con soporte Tecnico. Por favor, comuniquese con su administrador.',
+            'content': {
+                'application/json': {
+                    'schema': {'$ref': '#/components/schemas/ApiException'},
+                    'examples': {
+                        'internalServerErrorExample': {'$ref': '#/components/examples/InternalServerErrorExample'},
+                    },
+                },
+            },
+        },
+        'GatewayTimeout': {
+            'description': 'El tiempo de espera para recibir una respuesta del  backend ha expirado',
+            'content': {
+                'application/json': {
+                    'schema': {'$ref': '#/components/schemas/ApiException'},
+                    'examples': {
+                        'internalServerErrorExample': {'$ref': '#/components/examples/GatewayTimeoutExample'},
+                    },
+                },
+            },
+        },
+    },
+    'examples': {
+        'InternalServerErrorExample': {
+            'summary': 'Error interno',
+            'value': {
+                'code': 'ER0006',
+                'description': 'Error interno del servidor',
+                'errorType': 'Technical',
+                'exceptionDetails': [
+                    {
+                        'code': 'TL005',
+                        'description': 'Fallo en servicio backend',
+                        'path': 'backend.service',
+                        'url': 'http://documentacion-to-fix-error.com/internal-error',
+                    },
+                ],
+            },
+        },
+        'GatewayTimeoutExample': {
+            'summary': 'Timeout backend',
+            'value': {
+                'code': 'ER0007',
+                'description': 'Tiempo de espera excedido',
+                'errorType': 'Technical',
+                'exceptionDetails': [
+                    {
+                        'code': 'TL0006',
+                        'description': 'Timeout en integracion externa',
+                        'path': 'backend.timeout',
+                        'url': 'http://documentacion-to-fix-error.com/internal-error',
+                    },
+                ],
+            },
+        },
+    },
+    'schemas': {
+        'Code': {
+            'type': 'string',
+            'title': 'Code',
+            'description': 'Codigo de error de alto, nivel, es el 2do nivel de detalle de un error, se basa en el http code devuelto.El formato es ERXXXX, donde XXXX es el numero de error.',
+            'maxLength': 6,
+            'example': 'ER0007',
+        },
+        'ErrorType': {
+            'type': 'string',
+            'title': 'ErrorType',
+            'enum': ['Functional', 'Technical'],
+            'description': (
+                'Tipo de error:\n'
+                '- Functional - Error devuelto por una validacion o regla de \n'
+                'negocio no superada\n'
+                '- Techical - Error devuelto por la herramienta o sistema,\n'
+                'generalmente causado por problemas tecnicos o dependencias externas.\n'
+            ),
+            'example': 'Functional',
+        },
+        'Description': {
+            'type': 'string',
+            'title': 'Description',
+            'description': 'Descripcion del mensaje de error, alto nivel.',
+            'maxLength': 500,
+            'example': 'Error al llamar al servicio',
+        },
+        'Path': {
+            'type': 'string',
+            'title': 'Path',
+            'maxLength': 200,
+            'description': 'Referencia al path del Json involucrado en el error, aqui se indica que objecto del request, response o parametro de consulta es el involucrado con el error',
+            'example': 'Party.partyIdentification.IdentifierValue',
+        },
+        'Url': {
+            'type': 'string',
+            'title': 'Url',
+            'maxLength': 200,
+            'description': 'Ubicacion de la documentacion para soporte del problema.',
+            'example': 'https://documentation-to-fix-error.com/como-consultar-datos-usuario-info',
+        },
+        'ApiExceptionDetail': {
+            'type': 'object',
+            'title': 'ApiExceptionDetail',
+            'description': 'Contiene la lista de detalles para mayor detalle del error originado',
+            'example': {
+                'code': 'TL0001',
+                'description': 'Error al llamar al servicio',
+                'path': 'Party.partyIdentification.IdentifierValue',
+                'url': 'https://documentacion-to-fix-error.com/como-consultar-datos-usuario-info',
+            },
+            'properties': {
+                'code': {'$ref': '#/components/schemas/Code'},
+                'description': {'$ref': '#/components/schemas/Description'},
+                'path': {'$ref': '#/components/schemas/Path'},
+                'url': {'$ref': '#/components/schemas/Url'},
+                'exceptionDetails': {
+                    'type': 'array',
+                    'description': 'Contiene la lista de detalles para mayor detalle del error originado',
+                    'items': {'$ref': '#/components/schemas/ApiExceptionDetail'},
+                },
+            },
+        },
+        'ApiException': {
+            'type': 'object',
+            'title': 'ApiException',
+            'description': 'El servicio no recibio una respuesta oportuna de la aplicacion',
+            'example': {
+                'code': 'ER0007',
+                'description': 'Error al llamar al servicio',
+                'errorType': 'Functional',
+                'exceptionalDetails': [
+                    {
+                        'code': 'TL001',
+                        'description': 'Error al llamar al servicio',
+                        'path': 'Party.part',
+                        'url': 'https://documentation-to-fix-error.com/como-consultar-datos-usuario-info',
+                    },
+                ],
+            },
+            'properties': {
+                'code': {'$ref': '#/components/schemas/Code'},
+                'errorType': {'$ref': '#/components/schemas/ErrorType'},
+                'description': {'$ref': '#/components/schemas/Description'},
+                'exceptionDetails': {
+                    'type': 'array',
+                    'description': 'Contiene la lista de detalles para mayor detalle del error originado',
+                    'items': {'$ref': '#/components/schemas/ApiExceptionDetail'},
+                },
+            },
+        },
+    },
+}
+
 HEADERS = {
     "Authorization": f"Bearer {TOKEN}",
     "Accept": "application/vnd.github+json",
@@ -134,6 +290,66 @@ def encontrar_bloque(lineas: list, clave: str):
     return None
 
 
+def encontrar_hijo_directo(lineas: list, inicio: int, fin: int, indent_esperado: int, clave: str):
+    """Busca 'clave' dentro de [inicio, fin) exigiendo que este exactamente al nivel
+    'indent_esperado'. No basta con acotar el rango de lineas porque una clave como
+    'examples' o 'responses' puede repetirse anidada mas profundo con otro significado
+    (ej. 'components.responses.X.content.application/json.examples' vs
+    'components.examples'); exigir la indentacion exacta evita confundirlas."""
+    patron = re.compile(rf'^(\s*){re.escape(clave)}:\s*$')
+    for i in range(inicio, fin):
+        m = patron.match(lineas[i])
+        if not m or len(m.group(1)) != indent_esperado:
+            continue
+        f = i + 1
+        for j in range(i + 1, fin):
+            siguiente = lineas[j]
+            if siguiente.strip() == '':
+                f = j + 1
+                continue
+            indent_siguiente = len(siguiente) - len(siguiente.lstrip(' \t'))
+            if indent_siguiente > indent_esperado:
+                f = j + 1
+                continue
+            break
+        return i, f
+    return None
+
+
+def agregar_o_actualizar_hijo(contenido: str, padre: str, clave: str, datos: dict) -> str:
+    """Agrega 'clave' como hija directa de 'padre' (ej. 'responses' bajo 'components'), o
+    regenera su bloque si ya existe. Exige que 'clave' este al nivel de indentacion
+    inmediato de 'padre' para no confundirla con una clave homonima anidada mas profundo."""
+    lineas = contenido.split('\n')
+    bloque_padre = encontrar_bloque(lineas, padre)
+    if not bloque_padre:
+        raise ValueError(f"No se encontro la clave '{padre}' en la plantilla.")
+    inicio_padre, fin_padre, indent_padre = bloque_padre
+
+    indent_clave = indent_padre + 2
+    prefijo_nietos = ' ' * (indent_clave + 2)
+    fragmento = yaml.safe_dump(datos, sort_keys=False, allow_unicode=True, default_flow_style=False)
+    cuerpo = [prefijo_nietos + linea if linea else linea for linea in fragmento.splitlines()]
+    bloque_nuevo = [f"{' ' * indent_clave}{clave}:"] + cuerpo
+
+    bloque_hijo = encontrar_hijo_directo(lineas, inicio_padre + 1, fin_padre, indent_clave, clave)
+    if bloque_hijo:
+        inicio_hijo, fin_hijo = bloque_hijo
+        nuevas = lineas[:inicio_hijo] + bloque_nuevo + lineas[fin_hijo:]
+    else:
+        nuevas = lineas[:fin_padre] + bloque_nuevo + lineas[fin_padre:]
+    return '\n'.join(nuevas)
+
+
+def agregar_componentes_error(contenido: str) -> str:
+    """Agrega bajo 'components' las respuestas/ejemplos/schemas estandar de error, para
+    que las operaciones puedan referenciar '500'/'504' contra un contrato comun."""
+    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'responses', COMPONENTES_ERROR['responses'])
+    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'examples', COMPONENTES_ERROR['examples'])
+    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'schemas', COMPONENTES_ERROR['schemas'])
+    return contenido
+
+
 def reemplazar_bloque_indentado(contenido: str, clave: str, datos: dict, vacio: str = '{}') -> str:
     """Regenera por completo el bloque hijo de 'clave' a partir de un dict, sin importar
     su indentacion ni si tiene contenido despues (a diferencia de 'paths' en la plantilla
@@ -182,7 +398,11 @@ def construir_paths(filas, tag, api_type) -> dict:
         parametros = construir_parametros_header(api_type)
         if parametros:
             operacion['parameters'] = parametros
-        operacion['responses'] = {'200': {'description': 'OK'}}
+        operacion['responses'] = {
+            '200': {'description': 'OK'},
+            '500': {'$ref': '#/components/responses/InternalServerError'},
+            '504': {'$ref': '#/components/responses/GatewayTimeout'},
+        }
         paths.setdefault(endpoint, {})[metodo] = operacion
     return paths
 
@@ -205,6 +425,7 @@ def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
     nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-type', api_type)
     nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-id', slug(tag))
     nuevo = reemplazar_bloque_indentado(nuevo, 'paths', construir_paths(grupo, tag, api_type))
+    nuevo = agregar_componentes_error(nuevo)
     return nuevo
 
 
@@ -288,7 +509,18 @@ def obtener_archivo(repo, path):
     for intento in range(3):
         response = requests.get(url, headers=HEADERS)
         if response.status_code == 200:
-            data = response.json()
+            try:
+                data = response.json()
+            except ValueError:
+                logging.error(
+                    f"Respuesta 200 con cuerpo no-JSON al obtener '{path}' en '{repo}'. "
+                    f"Content-Type: {response.headers.get('Content-Type')}. "
+                    f"Cuerpo (primeros 500 chars): {response.text[:500]!r}"
+                )
+                if intento < 2:
+                    time.sleep(5)
+                    continue
+                return None, None
             contenido = base64.b64decode(data['content']).decode('utf-8')
             contenido = contenido.replace('\r\n', '\n').replace('\r', '\n')
             return contenido, data['sha']
