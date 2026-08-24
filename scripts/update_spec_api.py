@@ -501,6 +501,8 @@ def construir_channels(filas, tag) -> dict:
             logging.warning(f"Metodo '{metodo}' no reconocido para el topic '{topic}' (se esperaba Send/Receive). Fila omitida.")
             continue
         canal = channels.setdefault(topic, {'description': descripcion})
+        if descripcion and not canal.get('description'):
+            canal['description'] = descripcion
         canal[operacion] = {
             'operationId': operation_id(operacion, topic),
             'description': descripcion,
