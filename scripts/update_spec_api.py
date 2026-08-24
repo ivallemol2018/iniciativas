@@ -225,6 +225,14 @@ def cargar_excel():
     return df
 
 
+def texto_o_vacio(valor) -> str:
+    """Convierte una celda del Excel a texto, tratando celdas vacias (NaN) como '' en
+    vez de la cadena literal 'nan' que produce str() sobre un float NaN de pandas."""
+    if pd.isna(valor):
+        return ''
+    return str(valor).strip()
+
+
 def escalar_yaml(texto: str) -> str:
     """Escapa un valor para insertarlo como scalar plano de una linea en YAML.
 
@@ -429,7 +437,7 @@ def construir_paths(filas, tag, api_type) -> dict:
     for _, fila in filas.iterrows():
         endpoint = str(fila['Endpoint']).strip()
         metodo = str(fila['Metodo']).strip().lower()
-        descripcion = str(fila['Descripcion del Endpoint']).strip()
+        descripcion = texto_o_vacio(fila['Descripcion del Endpoint'])
         if not endpoint or not metodo:
             continue
         operacion = {
@@ -485,7 +493,7 @@ def construir_channels(filas, tag) -> dict:
     for _, fila in filas.iterrows():
         topic = extraer_topic(str(fila['Endpoint']))
         metodo = str(fila['Metodo']).strip().lower()
-        descripcion = str(fila['Descripcion del Endpoint']).strip()
+        descripcion = texto_o_vacio(fila['Descripcion del Endpoint'])
         if not topic or not metodo:
             continue
         operacion = METODO_A_OPERACION_ASYNC.get(metodo)
