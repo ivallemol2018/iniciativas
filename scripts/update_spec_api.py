@@ -341,9 +341,23 @@ def agregar_o_actualizar_hijo(contenido: str, padre: str, clave: str, datos: dic
     return '\n'.join(nuevas)
 
 
+def asegurar_clave_raiz(contenido: str, clave: str) -> str:
+    """Garantiza que 'clave' exista como clave raiz (indent 0), agregandola vacia al
+    final del archivo si no esta presente. La plantilla base REST no trae 'components',
+    a diferencia de la de AsyncAPI que ya trae 'messageTraits' bajo ese nodo."""
+    lineas = contenido.split('\n')
+    if encontrar_bloque(lineas, clave):
+        return contenido
+    while lineas and lineas[-1].strip() == '':
+        lineas.pop()
+    lineas.append(f'{clave}:')
+    return '\n'.join(lineas)
+
+
 def agregar_componentes_error(contenido: str) -> str:
     """Agrega bajo 'components' las respuestas/ejemplos/schemas estandar de error, para
     que las operaciones puedan referenciar '500'/'504' contra un contrato comun."""
+    contenido = asegurar_clave_raiz(contenido, 'components')
     contenido = agregar_o_actualizar_hijo(contenido, 'components', 'responses', COMPONENTES_ERROR['responses'])
     contenido = agregar_o_actualizar_hijo(contenido, 'components', 'examples', COMPONENTES_ERROR['examples'])
     contenido = agregar_o_actualizar_hijo(contenido, 'components', 'schemas', COMPONENTES_ERROR['schemas'])
