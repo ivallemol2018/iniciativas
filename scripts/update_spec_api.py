@@ -73,7 +73,7 @@ COMPONENTES_ERROR = {
                 'code': 'ER0006',
                 'description': 'Error interno del servidor',
                 'errorType': 'Technical',
-                'exceptionDetails': [
+                'errorDetail': [
                     {
                         'code': 'TL005',
                         'description': 'Fallo en servicio backend',
@@ -89,7 +89,7 @@ COMPONENTES_ERROR = {
                 'code': 'ER0007',
                 'description': 'Tiempo de espera excedido',
                 'errorType': 'Technical',
-                'exceptionDetails': [
+                'errorDetail': [
                     {
                         'code': 'TL0006',
                         'description': 'Timeout en integracion externa',
@@ -157,7 +157,7 @@ COMPONENTES_ERROR = {
                 'description': {'$ref': '#/components/schemas/Description'},
                 'path': {'$ref': '#/components/schemas/Path'},
                 'url': {'$ref': '#/components/schemas/Url'},
-                'exceptionDetails': {
+                'errorDetail': {
                     'type': 'array',
                     'description': 'Contiene la lista de detalles para mayor detalle del error originado',
                     'items': {'$ref': '#/components/schemas/ApiExceptionDetail'},
@@ -185,7 +185,7 @@ COMPONENTES_ERROR = {
                 'code': {'$ref': '#/components/schemas/Code'},
                 'errorType': {'$ref': '#/components/schemas/ErrorType'},
                 'description': {'$ref': '#/components/schemas/Description'},
-                'exceptionDetails': {
+                'errorDetail': {
                     'type': 'array',
                     'description': 'Contiene la lista de detalles para mayor detalle del error originado',
                     'items': {'$ref': '#/components/schemas/ApiExceptionDetail'},
@@ -389,6 +389,33 @@ def reemplazar_bloque_indentado(contenido: str, clave: str, datos: dict, vacio: 
 
 # --- REST / OpenAPI -----------------------------------------------------
 
+SERVER_URL_POR_TIPO = {
+    'UX': '/channel-{app_code}-{contexto}/v1',
+    'BS': '/business-{contexto}/v1',
+    'CR': '/core-{contexto}/v1',
+    'DATA': '/data-{contexto}/v1',
+    'PU': '/public-{contexto}/v1',
+    'PV': '/private-{app_code}-{contexto}/v1',
+    'OP': '/open-{contexto}/v1',
+}
+
+
+def construir_server_url(api_type: str, owner: str, tag: str) -> str:
+    plantilla_url = SERVER_URL_POR_TIPO.get(api_type.strip().upper())
+    if not plantilla_url:
+        raise ValueError(f"No hay una regla de URL de servidor definida para el tipo '{api_type}'.")
+    return plantilla_url.format(app_code=slug(owner), contexto=slug(tag))
+
+
+def reemplazar_url_servidor(contenido: str, url: str) -> str:
+    url_esc = escalar_yaml(url)
+    patron = re.compile(r'(?m)^(\s*-\s*url:\s*).*$')
+    nuevo, n = patron.subn(lambda m: m.group(1) + url_esc, contenido, count=1)
+    if not n:
+        raise ValueError("No se encontro la clave 'url' bajo 'servers' en la plantilla.")
+    return nuevo
+
+
 def construir_parametros_header(api_type: str) -> list:
     headers = HEADERS_REQUERIDOS_POR_TIPO.get(api_type.strip().upper(), [])
     return [
@@ -433,11 +460,13 @@ def reemplazar_tags_rest(contenido: str, tag: str) -> str:
 
 def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
     api_type = str(grupo.iloc[0]['Tipo']).strip()
+    owner = str(grupo.iloc[0]['Owner']).strip()
 
     nuevo = reemplazar_info(contenido, api_name, '1.0.0')
     nuevo = reemplazar_tags_rest(nuevo, tag)
     nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-type', api_type)
     nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-id', slug(tag))
+    nuevo = reemplazar_url_servidor(nuevo, construir_server_url(api_type, owner, tag))
     nuevo = reemplazar_bloque_indentado(nuevo, 'paths', construir_paths(grupo, tag, api_type))
     nuevo = agregar_componentes_error(nuevo)
     return nuevo
