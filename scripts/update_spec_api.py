@@ -424,12 +424,25 @@ def reemplazar_url_servidor(contenido: str, url: str) -> str:
     return nuevo
 
 
+def construir_parametro_header_definicion(header: str) -> dict:
+    return {'name': header, 'in': 'header', 'required': True, 'schema': {'type': 'string'}}
+
+
 def construir_parametros_header(api_type: str) -> list:
     headers = HEADERS_REQUERIDOS_POR_TIPO.get(api_type.strip().upper(), [])
-    return [
-        {'name': header, 'in': 'header', 'required': True, 'schema': {'type': 'string'}}
-        for header in headers
-    ]
+    return [{'$ref': f'#/components/parameters/{header}'} for header in headers]
+
+
+def agregar_parametros_header_componentes(contenido: str, api_type: str) -> str:
+    """Agrega bajo 'components.parameters' la definicion de cada header requerido por
+    'api_type', para que las operaciones los referencien por '$ref' en vez de
+    duplicar el mismo objeto de parametro en cada endpoint."""
+    headers = HEADERS_REQUERIDOS_POR_TIPO.get(api_type.strip().upper(), [])
+    if not headers:
+        return contenido
+    contenido = asegurar_clave_raiz(contenido, 'components')
+    datos = {header: construir_parametro_header_definicion(header) for header in headers}
+    return agregar_o_actualizar_hijo(contenido, 'components', 'parameters', datos)
 
 
 def construir_paths(filas, tag, api_type) -> dict:
@@ -476,6 +489,7 @@ def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
     nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-id', slug(tag))
     nuevo = reemplazar_url_servidor(nuevo, construir_server_url(api_type, owner, tag))
     nuevo = reemplazar_bloque_indentado(nuevo, 'paths', construir_paths(grupo, tag, api_type))
+    nuevo = agregar_parametros_header_componentes(nuevo, api_type)
     nuevo = agregar_componentes_error(nuevo)
     return nuevo
 
