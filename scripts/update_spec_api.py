@@ -28,7 +28,7 @@ METODO_A_OPERACION_ASYNC = {
 }
 
 HEADERS_INTERNOS = ['Authorization', 'Request-ID', 'request-data', 'app-code', 'caller-name', 'Ocp-Apim-Subscription-Key']
-HEADERS_UX = ['Authorization', 'Ocp-Apim-Subscription-Key']
+HEADERS_UX = ['Authorization']
 HEADERS_PV = ['Authorization', 'subscription-key']
 
 HEADERS_REQUERIDOS_POR_TIPO = {
@@ -431,10 +431,12 @@ def slug(texto: str) -> str:
 
 def reemplazar_info(contenido: str, title: str, version: str) -> str:
     title_esc = escalar_yaml(title)
+    descripcion_esc = escalar_yaml('[DESCRIPCION_API]')
     contenido, n_title = re.subn(r'(?m)^(\s*title:\s*).*$', lambda m: m.group(1) + title_esc, contenido, count=1)
+    contenido, n_description = re.subn(r'(?m)^(\s*description:\s*).*$', lambda m: m.group(1) + descripcion_esc, contenido, count=1)
     contenido, n_version = re.subn(r'(?m)^(\s*version:\s*).*$', lambda m: m.group(1) + version, contenido, count=1)
-    if not n_title or not n_version:
-        raise ValueError("No se encontraron las claves 'title'/'version' bajo 'info' en la plantilla.")
+    if not n_title or not n_description or not n_version:
+        raise ValueError("No se encontraron las claves 'title'/'description'/'version' bajo 'info' en la plantilla.")
     return contenido
 
 
