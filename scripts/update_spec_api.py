@@ -65,6 +65,72 @@ COMPONENTES_ERROR = {
                 },
             },
         },
+        'BadRequest': {
+            'description': 'La solicitud enviada no es valida. Por favor revise los parametros o el cuerpo de la peticion.',
+            'content': {
+                'application/json': {
+                    'schema': {'$ref': '#/components/schemas/ApiException'},
+                    'examples': {
+                        'badRequestExample': {'$ref': '#/components/examples/BadRequestExample'},
+                    },
+                },
+            },
+        },
+        'Unauthorized': {
+            'description': 'No se pudo autenticar la solicitud. Por favor verifique las credenciales proporcionadas.',
+            'content': {
+                'application/json': {
+                    'schema': {'$ref': '#/components/schemas/ApiException'},
+                    'examples': {
+                        'unauthorizedExample': {'$ref': '#/components/examples/UnauthorizedExample'},
+                    },
+                },
+            },
+        },
+        'Forbidden': {
+            'description': 'No cuenta con los permisos necesarios para acceder a este recurso.',
+            'content': {
+                'application/json': {
+                    'schema': {'$ref': '#/components/schemas/ApiException'},
+                    'examples': {
+                        'forbiddenExample': {'$ref': '#/components/examples/ForbiddenExample'},
+                    },
+                },
+            },
+        },
+        'NotFound': {
+            'description': 'El recurso solicitado no fue encontrado.',
+            'content': {
+                'application/json': {
+                    'schema': {'$ref': '#/components/schemas/ApiException'},
+                    'examples': {
+                        'notFoundExample': {'$ref': '#/components/examples/NotFoundExample'},
+                    },
+                },
+            },
+        },
+        'TooManyRequests': {
+            'description': 'Se supero el limite de solicitudes permitidas. Por favor intente nuevamente mas tarde.',
+            'content': {
+                'application/json': {
+                    'schema': {'$ref': '#/components/schemas/ApiException'},
+                    'examples': {
+                        'tooManyRequestsExample': {'$ref': '#/components/examples/TooManyRequestsExample'},
+                    },
+                },
+            },
+        },
+        'ServiceUnavailable': {
+            'description': 'El servicio no se encuentra disponible en este momento. Por favor intente nuevamente mas tarde.',
+            'content': {
+                'application/json': {
+                    'schema': {'$ref': '#/components/schemas/ApiException'},
+                    'examples': {
+                        'serviceUnavailableExample': {'$ref': '#/components/examples/ServiceUnavailableExample'},
+                    },
+                },
+            },
+        },
     },
     'examples': {
         'InternalServerErrorExample': {
@@ -95,6 +161,102 @@ COMPONENTES_ERROR = {
                         'description': 'Timeout en integracion externa',
                         'path': 'backend.timeout',
                         'url': 'http://documentacion-to-fix-error.com/internal-error',
+                    },
+                ],
+            },
+        },
+        'BadRequestExample': {
+            'summary': 'Solicitud invalida',
+            'value': {
+                'code': 'ER0001',
+                'description': 'Solicitud invalida',
+                'errorType': 'Functional',
+                'errorDetail': [
+                    {
+                        'code': 'TL001',
+                        'description': 'Error de validacion en el request',
+                        'path': 'request.body',
+                        'url': 'http://documentacion-to-fix-error.com/bad-request',
+                    },
+                ],
+            },
+        },
+        'UnauthorizedExample': {
+            'summary': 'No autorizado',
+            'value': {
+                'code': 'ER0002',
+                'description': 'No autorizado',
+                'errorType': 'Functional',
+                'errorDetail': [
+                    {
+                        'code': 'TL002',
+                        'description': 'Error de autenticacion',
+                        'path': 'request.headers.Authorization',
+                        'url': 'http://documentacion-to-fix-error.com/unauthorized',
+                    },
+                ],
+            },
+        },
+        'ForbiddenExample': {
+            'summary': 'Acceso denegado',
+            'value': {
+                'code': 'ER0003',
+                'description': 'Acceso denegado',
+                'errorType': 'Functional',
+                'errorDetail': [
+                    {
+                        'code': 'TL003',
+                        'description': 'Error de autorizacion',
+                        'path': 'request.permissions',
+                        'url': 'http://documentacion-to-fix-error.com/forbidden',
+                    },
+                ],
+            },
+        },
+        'NotFoundExample': {
+            'summary': 'Recurso no encontrado',
+            'value': {
+                'code': 'ER0004',
+                'description': 'Recurso no encontrado',
+                'errorType': 'Functional',
+                'errorDetail': [
+                    {
+                        'code': 'TL004',
+                        'description': 'Recurso no encontrado',
+                        'path': 'request.resource',
+                        'url': 'http://documentacion-to-fix-error.com/not-found',
+                    },
+                ],
+            },
+        },
+        'TooManyRequestsExample': {
+            'summary': 'Limite de solicitudes excedido',
+            'value': {
+                'code': 'ER0005',
+                'description': 'Limite de solicitudes excedido',
+                'errorType': 'Technical',
+                'errorDetail': [
+                    {
+                        'code': 'TL007',
+                        'description': 'Limite de solicitudes excedido',
+                        'path': 'request.rateLimit',
+                        'url': 'http://documentacion-to-fix-error.com/too-many-requests',
+                    },
+                ],
+            },
+        },
+        'ServiceUnavailableExample': {
+            'summary': 'Servicio no disponible',
+            'value': {
+                'code': 'ER0008',
+                'description': 'Servicio no disponible',
+                'errorType': 'Technical',
+                'errorDetail': [
+                    {
+                        'code': 'TL008',
+                        'description': 'Servicio no disponible temporalmente',
+                        'path': 'backend.service',
+                        'url': 'http://documentacion-to-fix-error.com/service-unavailable',
                     },
                 ],
             },
@@ -193,6 +355,18 @@ COMPONENTES_ERROR = {
             },
         },
     },
+}
+
+# Codigo HTTP -> nombre del 'components.responses' que toda operacion REST referencia.
+RESPUESTAS_ERROR_POR_CODIGO = {
+    '400': 'BadRequest',
+    '401': 'Unauthorized',
+    '403': 'Forbidden',
+    '404': 'NotFound',
+    '429': 'TooManyRequests',
+    '500': 'InternalServerError',
+    '503': 'ServiceUnavailable',
+    '504': 'GatewayTimeout',
 }
 
 HEADERS = {
@@ -496,11 +670,9 @@ def construir_paths(filas, tag, api_type) -> dict:
         parametros = construir_parametros_path(endpoint) + construir_parametros_header(api_type)
         if parametros:
             operacion['parameters'] = parametros
-        operacion['responses'] = {
-            '200': {'description': 'OK'},
-            '500': {'$ref': '#/components/responses/InternalServerError'},
-            '504': {'$ref': '#/components/responses/GatewayTimeout'},
-        }
+        operacion['responses'] = {'200': {'description': 'OK'}}
+        for codigo, nombre in RESPUESTAS_ERROR_POR_CODIGO.items():
+            operacion['responses'][codigo] = {'$ref': f'#/components/responses/{nombre}'}
         paths.setdefault(endpoint, {})[metodo] = operacion
     return paths
 
@@ -519,10 +691,15 @@ def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
     api_type = str(grupo.iloc[0]['Tipo']).strip()
     owner = str(grupo.iloc[0]['Owner']).strip()
 
+    if api_type == 'UX':
+        api_id = f'{slug(owner)}-{slug(tag)}'
+    else:
+        api_id = slug(tag)
+
     nuevo = reemplazar_info(contenido, api_name, '1.0.0')
     nuevo = reemplazar_tags_rest(nuevo, tag)
     nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-type', api_type)
-    nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-id', slug(tag))
+    nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-id', api_id)
     nuevo = reemplazar_url_servidor(nuevo, construir_server_url(api_type, owner, tag))
     nuevo = reemplazar_bloque_indentado(nuevo, 'paths', construir_paths(grupo, tag, api_type))
     nuevo = agregar_parametros_componentes(nuevo, api_type, grupo)
