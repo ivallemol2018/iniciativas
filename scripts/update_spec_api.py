@@ -433,16 +433,52 @@ def construir_parametros_header(api_type: str) -> list:
     return [{'$ref': f'#/components/parameters/{header}'} for header in headers]
 
 
-def agregar_parametros_header_componentes(contenido: str, api_type: str) -> str:
-    """Agrega bajo 'components.parameters' la definicion de cada header requerido por
-    'api_type', para que las operaciones los referencien por '$ref' en vez de
-    duplicar el mismo objeto de parametro en cada endpoint."""
+def extraer_parametros_path(endpoint: str) -> list:
+    """Devuelve los nombres de path params de un endpoint, ej. ['accountId'] para
+    '/accounts/{accountId}'."""
+    return re.findall(r'\{([^{}]+)\}', endpoint)
+
+
+def nombre_componente_path_param(param: str) -> str:
+    """PascalCase minimo: solo sube la primera letra, preservando el resto del nombre
+    tal como viene en el endpoint (ej. 'accountId' -> 'AccountId')."""
+    return param[0].upper() + param[1:] if param else param
+
+
+def construir_parametro_path_definicion(param: str) -> dict:
+    return {'name': param, 'in': 'path', 'required': True, 'schema': {'type': 'string'}}
+
+
+def construir_parametros_path(endpoint: str) -> list:
+    return [
+        {'$ref': f'#/components/parameters/{nombre_componente_path_param(param)}'}
+        for param in extraer_parametros_path(endpoint)
+    ]
+
+
+def recolectar_definiciones_parametros(filas, api_type: str) -> dict:
+    """Junta en un solo dict las definiciones de todos los parametros referenciados
+    por las operaciones (headers segun 'api_type' + path params de cada endpoint), para
+    escribir 'components.parameters' de una sola vez sin pisar entradas ya agregadas."""
     headers = HEADERS_REQUERIDOS_POR_TIPO.get(api_type.strip().upper(), [])
-    if not headers:
+    definiciones = {header: construir_parametro_header_definicion(header) for header in headers}
+    for _, fila in filas.iterrows():
+        endpoint = str(fila['Endpoint']).strip()
+        for param in extraer_parametros_path(endpoint):
+            clave = nombre_componente_path_param(param)
+            definiciones.setdefault(clave, construir_parametro_path_definicion(param))
+    return definiciones
+
+
+def agregar_parametros_componentes(contenido: str, api_type: str, filas) -> str:
+    """Agrega bajo 'components.parameters' la definicion de cada header y path param
+    usados, para que las operaciones los referencien por '$ref' en vez de duplicar el
+    mismo objeto de parametro en cada endpoint."""
+    definiciones = recolectar_definiciones_parametros(filas, api_type)
+    if not definiciones:
         return contenido
     contenido = asegurar_clave_raiz(contenido, 'components')
-    datos = {header: construir_parametro_header_definicion(header) for header in headers}
-    return agregar_o_actualizar_hijo(contenido, 'components', 'parameters', datos)
+    return agregar_o_actualizar_hijo(contenido, 'components', 'parameters', definiciones)
 
 
 def construir_paths(filas, tag, api_type) -> dict:
@@ -457,7 +493,7 @@ def construir_paths(filas, tag, api_type) -> dict:
             'tags': [tag],
             'summary': descripcion,
         }
-        parametros = construir_parametros_header(api_type)
+        parametros = construir_parametros_path(endpoint) + construir_parametros_header(api_type)
         if parametros:
             operacion['parameters'] = parametros
         operacion['responses'] = {
@@ -489,7 +525,7 @@ def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
     nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-id', slug(tag))
     nuevo = reemplazar_url_servidor(nuevo, construir_server_url(api_type, owner, tag))
     nuevo = reemplazar_bloque_indentado(nuevo, 'paths', construir_paths(grupo, tag, api_type))
-    nuevo = agregar_parametros_header_componentes(nuevo, api_type)
+    nuevo = agregar_parametros_componentes(nuevo, api_type, grupo)
     nuevo = agregar_componentes_error(nuevo)
     return nuevo
 
