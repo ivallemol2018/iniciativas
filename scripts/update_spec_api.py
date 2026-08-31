@@ -538,13 +538,52 @@ def asegurar_clave_raiz(contenido: str, clave: str) -> str:
     return '\n'.join(lineas)
 
 
-def agregar_componentes_error(contenido: str) -> str:
+def _solo_code_y_description(valor: dict) -> dict:
+    return {'code': valor['code'], 'description': valor['description']}
+
+
+def construir_componentes_error(api_type: str) -> dict:
+    """Para 'UX' el contrato de error se reduce a 'code'/'description': se quitan
+    'errorType' y el detalle del error tanto del schema 'ApiException' como de los
+    valores de ejemplo, y los schemas que solo servian a esos campos ('ErrorType',
+    'Path', 'Url', 'ApiExceptionDetail') dejan de agregarse por quedar sin uso."""
+    if api_type.strip().upper() != 'UX':
+        return COMPONENTES_ERROR
+
+    examples = {
+        nombre: {**ejemplo, 'value': _solo_code_y_description(ejemplo['value'])}
+        for nombre, ejemplo in COMPONENTES_ERROR['examples'].items()
+    }
+    api_exception = COMPONENTES_ERROR['schemas']['ApiException']
+    schemas = {
+        'Code': COMPONENTES_ERROR['schemas']['Code'],
+        'Description': COMPONENTES_ERROR['schemas']['Description'],
+        'ApiException': {
+            'type': api_exception['type'],
+            'title': api_exception['title'],
+            'description': api_exception['description'],
+            'example': _solo_code_y_description(api_exception['example']),
+            'properties': {
+                'code': {'$ref': '#/components/schemas/Code'},
+                'description': {'$ref': '#/components/schemas/Description'},
+            },
+        },
+    }
+    return {
+        'responses': COMPONENTES_ERROR['responses'],
+        'examples': examples,
+        'schemas': schemas,
+    }
+
+
+def agregar_componentes_error(contenido: str, api_type: str) -> str:
     """Agrega bajo 'components' las respuestas/ejemplos/schemas estandar de error, para
     que las operaciones puedan referenciar '500'/'504' contra un contrato comun."""
+    componentes_error = construir_componentes_error(api_type)
     contenido = asegurar_clave_raiz(contenido, 'components')
-    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'responses', COMPONENTES_ERROR['responses'])
-    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'examples', COMPONENTES_ERROR['examples'])
-    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'schemas', COMPONENTES_ERROR['schemas'])
+    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'responses', componentes_error['responses'])
+    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'examples', componentes_error['examples'])
+    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'schemas', componentes_error['schemas'])
     return contenido
 
 
@@ -705,7 +744,7 @@ def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
     nuevo = reemplazar_url_servidor(nuevo, construir_server_url(api_type, owner, tag))
     nuevo = reemplazar_bloque_indentado(nuevo, 'paths', construir_paths(grupo, tag, api_type))
     nuevo = agregar_parametros_componentes(nuevo, api_type, grupo)
-    nuevo = agregar_componentes_error(nuevo)
+    nuevo = agregar_componentes_error(nuevo, api_type)
     return nuevo
 
 
