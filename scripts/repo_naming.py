@@ -26,6 +26,11 @@ def parse_api_name(api_name: str, api_type: str) -> dict | None:
             if not name:
                 return None
             return {'repo_name': f"private-{code}-{name}", 'name_part': name}
+        elif len(parts) > 1 and parts[1] == 'OP' and api_type == 'OP':
+            name = '-'.join(parts[2:-1]).lower()
+            if not name:
+                return None
+            return {'repo_name': f"open-{name}", 'name_part': name}
 
     elif prefix == 'AsyncAPI' and api_type == 'Async':
         if len(parts) > 2:
