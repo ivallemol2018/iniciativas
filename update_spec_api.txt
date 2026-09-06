@@ -916,8 +916,7 @@ def main():
             if estilo == 'rest':
                 nuevo_contenido = procesar_rest(contenido, str(api_name).strip(), tag, grupo)
             elif estilo == 'event-driven':
-                continue
-                #-- nuevo_contenido = procesar_event_driven(contenido, str(api_name).strip(), tag, grupo)
+                nuevo_contenido = procesar_event_driven(contenido, str(api_name).strip(), tag, grupo)
             else:
                 logging.warning(f"Estilo '{estilo}' no soportado para '{repo}'. Se omite.")
                 continue
