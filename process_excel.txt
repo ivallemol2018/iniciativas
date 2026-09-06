@@ -53,7 +53,8 @@ for _,row in unique_apis.iterrows():
     if api_type == 'PQL':
         logging.info(f"Saltando API '{api_name}' con tipo 'PQL' (no se debe crear repo).")
         continue # Salta a la siguiente fila 
-        
+
+    logging.info(f"API '{api_name}' ")
     repo_name = generate_repo_name(api_name, api_type)
     if repo_name:
         prefix = repo_name.split('-')[0]
