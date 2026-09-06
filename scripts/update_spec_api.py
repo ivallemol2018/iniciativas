@@ -896,8 +896,8 @@ def main():
 
     for api_name, grupo in df.groupby('API', sort=False):
         api_type = str(grupo.iloc[0]['Tipo']).strip()
-        if api_type == 'PQL':
-            continue
+        if api_type == 'PQL' or api_type == 'PU' or api_type == 'OP' :
+            continuePU
 
         parsed = parse_api_name(str(api_name).strip(), api_type)
         if not parsed or parsed['repo_name'] not in repos_creados:
@@ -916,7 +916,8 @@ def main():
             if estilo == 'rest':
                 nuevo_contenido = procesar_rest(contenido, str(api_name).strip(), tag, grupo)
             elif estilo == 'event-driven':
-                nuevo_contenido = procesar_event_driven(contenido, str(api_name).strip(), tag, grupo)
+                continue
+                #-- nuevo_contenido = procesar_event_driven(contenido, str(api_name).strip(), tag, grupo)
             else:
                 logging.warning(f"Estilo '{estilo}' no soportado para '{repo}'. Se omite.")
                 continue
