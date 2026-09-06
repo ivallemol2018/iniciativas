@@ -28,7 +28,7 @@ METODO_A_OPERACION_ASYNC = {
 }
 
 HEADERS_INTERNOS = ['Authorization', 'Request-ID', 'request-data', 'app-code', 'caller-name', 'Ocp-Apim-Subscription-Key']
-HEADERS_UX = ['Authorization', 'Ocp-Apim-Subscription-Key']
+HEADERS_UX = ['Authorization']
 HEADERS_PV = ['Authorization', 'subscription-key']
 
 HEADERS_REQUERIDOS_POR_TIPO = {
@@ -65,6 +65,72 @@ COMPONENTES_ERROR = {
                 },
             },
         },
+        'BadRequest': {
+            'description': 'La solicitud enviada no es valida. Por favor revise los parametros o el cuerpo de la peticion.',
+            'content': {
+                'application/json': {
+                    'schema': {'$ref': '#/components/schemas/ApiException'},
+                    'examples': {
+                        'badRequestExample': {'$ref': '#/components/examples/BadRequestExample'},
+                    },
+                },
+            },
+        },
+        'Unauthorized': {
+            'description': 'No se pudo autenticar la solicitud. Por favor verifique las credenciales proporcionadas.',
+            'content': {
+                'application/json': {
+                    'schema': {'$ref': '#/components/schemas/ApiException'},
+                    'examples': {
+                        'unauthorizedExample': {'$ref': '#/components/examples/UnauthorizedExample'},
+                    },
+                },
+            },
+        },
+        'Forbidden': {
+            'description': 'No cuenta con los permisos necesarios para acceder a este recurso.',
+            'content': {
+                'application/json': {
+                    'schema': {'$ref': '#/components/schemas/ApiException'},
+                    'examples': {
+                        'forbiddenExample': {'$ref': '#/components/examples/ForbiddenExample'},
+                    },
+                },
+            },
+        },
+        'NotFound': {
+            'description': 'El recurso solicitado no fue encontrado.',
+            'content': {
+                'application/json': {
+                    'schema': {'$ref': '#/components/schemas/ApiException'},
+                    'examples': {
+                        'notFoundExample': {'$ref': '#/components/examples/NotFoundExample'},
+                    },
+                },
+            },
+        },
+        'TooManyRequests': {
+            'description': 'Se supero el limite de solicitudes permitidas. Por favor intente nuevamente mas tarde.',
+            'content': {
+                'application/json': {
+                    'schema': {'$ref': '#/components/schemas/ApiException'},
+                    'examples': {
+                        'tooManyRequestsExample': {'$ref': '#/components/examples/TooManyRequestsExample'},
+                    },
+                },
+            },
+        },
+        'ServiceUnavailable': {
+            'description': 'El servicio no se encuentra disponible en este momento. Por favor intente nuevamente mas tarde.',
+            'content': {
+                'application/json': {
+                    'schema': {'$ref': '#/components/schemas/ApiException'},
+                    'examples': {
+                        'serviceUnavailableExample': {'$ref': '#/components/examples/ServiceUnavailableExample'},
+                    },
+                },
+            },
+        },
     },
     'examples': {
         'InternalServerErrorExample': {
@@ -95,6 +161,102 @@ COMPONENTES_ERROR = {
                         'description': 'Timeout en integracion externa',
                         'path': 'backend.timeout',
                         'url': 'http://documentacion-to-fix-error.com/internal-error',
+                    },
+                ],
+            },
+        },
+        'BadRequestExample': {
+            'summary': 'Solicitud invalida',
+            'value': {
+                'code': 'ER0001',
+                'description': 'Solicitud invalida',
+                'errorType': 'Functional',
+                'errorDetail': [
+                    {
+                        'code': 'TL001',
+                        'description': 'Error de validacion en el request',
+                        'path': 'request.body',
+                        'url': 'http://documentacion-to-fix-error.com/bad-request',
+                    },
+                ],
+            },
+        },
+        'UnauthorizedExample': {
+            'summary': 'No autorizado',
+            'value': {
+                'code': 'ER0002',
+                'description': 'No autorizado',
+                'errorType': 'Functional',
+                'errorDetail': [
+                    {
+                        'code': 'TL002',
+                        'description': 'Error de autenticacion',
+                        'path': 'request.headers.Authorization',
+                        'url': 'http://documentacion-to-fix-error.com/unauthorized',
+                    },
+                ],
+            },
+        },
+        'ForbiddenExample': {
+            'summary': 'Acceso denegado',
+            'value': {
+                'code': 'ER0003',
+                'description': 'Acceso denegado',
+                'errorType': 'Functional',
+                'errorDetail': [
+                    {
+                        'code': 'TL003',
+                        'description': 'Error de autorizacion',
+                        'path': 'request.permissions',
+                        'url': 'http://documentacion-to-fix-error.com/forbidden',
+                    },
+                ],
+            },
+        },
+        'NotFoundExample': {
+            'summary': 'Recurso no encontrado',
+            'value': {
+                'code': 'ER0004',
+                'description': 'Recurso no encontrado',
+                'errorType': 'Functional',
+                'errorDetail': [
+                    {
+                        'code': 'TL004',
+                        'description': 'Recurso no encontrado',
+                        'path': 'request.resource',
+                        'url': 'http://documentacion-to-fix-error.com/not-found',
+                    },
+                ],
+            },
+        },
+        'TooManyRequestsExample': {
+            'summary': 'Limite de solicitudes excedido',
+            'value': {
+                'code': 'ER0005',
+                'description': 'Limite de solicitudes excedido',
+                'errorType': 'Technical',
+                'errorDetail': [
+                    {
+                        'code': 'TL007',
+                        'description': 'Limite de solicitudes excedido',
+                        'path': 'request.rateLimit',
+                        'url': 'http://documentacion-to-fix-error.com/too-many-requests',
+                    },
+                ],
+            },
+        },
+        'ServiceUnavailableExample': {
+            'summary': 'Servicio no disponible',
+            'value': {
+                'code': 'ER0008',
+                'description': 'Servicio no disponible',
+                'errorType': 'Technical',
+                'errorDetail': [
+                    {
+                        'code': 'TL008',
+                        'description': 'Servicio no disponible temporalmente',
+                        'path': 'backend.service',
+                        'url': 'http://documentacion-to-fix-error.com/service-unavailable',
                     },
                 ],
             },
@@ -195,6 +357,18 @@ COMPONENTES_ERROR = {
     },
 }
 
+# Codigo HTTP -> nombre del 'components.responses' que toda operacion REST referencia.
+RESPUESTAS_ERROR_POR_CODIGO = {
+    '400': 'BadRequest',
+    '401': 'Unauthorized',
+    '403': 'Forbidden',
+    '404': 'NotFound',
+    '429': 'TooManyRequests',
+    '500': 'InternalServerError',
+    '503': 'ServiceUnavailable',
+    '504': 'GatewayTimeout',
+}
+
 HEADERS = {
     "Authorization": f"Bearer {TOKEN}",
     "Accept": "application/vnd.github+json",
@@ -257,10 +431,12 @@ def slug(texto: str) -> str:
 
 def reemplazar_info(contenido: str, title: str, version: str) -> str:
     title_esc = escalar_yaml(title)
+    descripcion_esc = escalar_yaml('[DESCRIPCION_API]')
     contenido, n_title = re.subn(r'(?m)^(\s*title:\s*).*$', lambda m: m.group(1) + title_esc, contenido, count=1)
+    contenido, n_description = re.subn(r'(?m)^(\s*description:\s*).*$', lambda m: m.group(1) + descripcion_esc, contenido, count=1)
     contenido, n_version = re.subn(r'(?m)^(\s*version:\s*).*$', lambda m: m.group(1) + version, contenido, count=1)
-    if not n_title or not n_version:
-        raise ValueError("No se encontraron las claves 'title'/'version' bajo 'info' en la plantilla.")
+    if not n_title or not n_description or not n_version:
+        raise ValueError("No se encontraron las claves 'title'/'description'/'version' bajo 'info' en la plantilla.")
     return contenido
 
 
@@ -362,13 +538,52 @@ def asegurar_clave_raiz(contenido: str, clave: str) -> str:
     return '\n'.join(lineas)
 
 
-def agregar_componentes_error(contenido: str) -> str:
+def _solo_code_y_description(valor: dict) -> dict:
+    return {'code': valor['code'], 'description': valor['description']}
+
+
+def construir_componentes_error(api_type: str) -> dict:
+    """Para 'UX' el contrato de error se reduce a 'code'/'description': se quitan
+    'errorType' y el detalle del error tanto del schema 'ApiException' como de los
+    valores de ejemplo, y los schemas que solo servian a esos campos ('ErrorType',
+    'Path', 'Url', 'ApiExceptionDetail') dejan de agregarse por quedar sin uso."""
+    if api_type.strip().upper() != 'UX':
+        return COMPONENTES_ERROR
+
+    examples = {
+        nombre: {**ejemplo, 'value': _solo_code_y_description(ejemplo['value'])}
+        for nombre, ejemplo in COMPONENTES_ERROR['examples'].items()
+    }
+    api_exception = COMPONENTES_ERROR['schemas']['ApiException']
+    schemas = {
+        'Code': COMPONENTES_ERROR['schemas']['Code'],
+        'Description': COMPONENTES_ERROR['schemas']['Description'],
+        'ApiException': {
+            'type': api_exception['type'],
+            'title': api_exception['title'],
+            'description': api_exception['description'],
+            'example': _solo_code_y_description(api_exception['example']),
+            'properties': {
+                'code': {'$ref': '#/components/schemas/Code'},
+                'description': {'$ref': '#/components/schemas/Description'},
+            },
+        },
+    }
+    return {
+        'responses': COMPONENTES_ERROR['responses'],
+        'examples': examples,
+        'schemas': schemas,
+    }
+
+
+def agregar_componentes_error(contenido: str, api_type: str) -> str:
     """Agrega bajo 'components' las respuestas/ejemplos/schemas estandar de error, para
     que las operaciones puedan referenciar '500'/'504' contra un contrato comun."""
+    componentes_error = construir_componentes_error(api_type)
     contenido = asegurar_clave_raiz(contenido, 'components')
-    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'responses', COMPONENTES_ERROR['responses'])
-    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'examples', COMPONENTES_ERROR['examples'])
-    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'schemas', COMPONENTES_ERROR['schemas'])
+    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'responses', componentes_error['responses'])
+    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'examples', componentes_error['examples'])
+    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'schemas', componentes_error['schemas'])
     return contenido
 
 
@@ -433,16 +648,52 @@ def construir_parametros_header(api_type: str) -> list:
     return [{'$ref': f'#/components/parameters/{header}'} for header in headers]
 
 
-def agregar_parametros_header_componentes(contenido: str, api_type: str) -> str:
-    """Agrega bajo 'components.parameters' la definicion de cada header requerido por
-    'api_type', para que las operaciones los referencien por '$ref' en vez de
-    duplicar el mismo objeto de parametro en cada endpoint."""
+def extraer_parametros_path(endpoint: str) -> list:
+    """Devuelve los nombres de path params de un endpoint, ej. ['accountId'] para
+    '/accounts/{accountId}'."""
+    return re.findall(r'\{([^{}]+)\}', endpoint)
+
+
+def nombre_componente_path_param(param: str) -> str:
+    """PascalCase minimo: solo sube la primera letra, preservando el resto del nombre
+    tal como viene en el endpoint (ej. 'accountId' -> 'AccountId')."""
+    return param[0].upper() + param[1:] if param else param
+
+
+def construir_parametro_path_definicion(param: str) -> dict:
+    return {'name': param, 'in': 'path', 'required': True, 'schema': {'type': 'string'}}
+
+
+def construir_parametros_path(endpoint: str) -> list:
+    return [
+        {'$ref': f'#/components/parameters/{nombre_componente_path_param(param)}'}
+        for param in extraer_parametros_path(endpoint)
+    ]
+
+
+def recolectar_definiciones_parametros(filas, api_type: str) -> dict:
+    """Junta en un solo dict las definiciones de todos los parametros referenciados
+    por las operaciones (headers segun 'api_type' + path params de cada endpoint), para
+    escribir 'components.parameters' de una sola vez sin pisar entradas ya agregadas."""
     headers = HEADERS_REQUERIDOS_POR_TIPO.get(api_type.strip().upper(), [])
-    if not headers:
+    definiciones = {header: construir_parametro_header_definicion(header) for header in headers}
+    for _, fila in filas.iterrows():
+        endpoint = str(fila['Endpoint']).strip()
+        for param in extraer_parametros_path(endpoint):
+            clave = nombre_componente_path_param(param)
+            definiciones.setdefault(clave, construir_parametro_path_definicion(param))
+    return definiciones
+
+
+def agregar_parametros_componentes(contenido: str, api_type: str, filas) -> str:
+    """Agrega bajo 'components.parameters' la definicion de cada header y path param
+    usados, para que las operaciones los referencien por '$ref' en vez de duplicar el
+    mismo objeto de parametro en cada endpoint."""
+    definiciones = recolectar_definiciones_parametros(filas, api_type)
+    if not definiciones:
         return contenido
     contenido = asegurar_clave_raiz(contenido, 'components')
-    datos = {header: construir_parametro_header_definicion(header) for header in headers}
-    return agregar_o_actualizar_hijo(contenido, 'components', 'parameters', datos)
+    return agregar_o_actualizar_hijo(contenido, 'components', 'parameters', definiciones)
 
 
 def construir_paths(filas, tag, api_type) -> dict:
@@ -457,14 +708,12 @@ def construir_paths(filas, tag, api_type) -> dict:
             'tags': [tag],
             'summary': descripcion,
         }
-        parametros = construir_parametros_header(api_type)
+        parametros = construir_parametros_path(endpoint) + construir_parametros_header(api_type)
         if parametros:
             operacion['parameters'] = parametros
-        operacion['responses'] = {
-            '200': {'description': 'OK'},
-            '500': {'$ref': '#/components/responses/InternalServerError'},
-            '504': {'$ref': '#/components/responses/GatewayTimeout'},
-        }
+        operacion['responses'] = {'200': {'description': 'OK'}}
+        for codigo, nombre in RESPUESTAS_ERROR_POR_CODIGO.items():
+            operacion['responses'][codigo] = {'$ref': f'#/components/responses/{nombre}'}
         paths.setdefault(endpoint, {})[metodo] = operacion
     return paths
 
@@ -483,14 +732,19 @@ def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
     api_type = str(grupo.iloc[0]['Tipo']).strip()
     owner = str(grupo.iloc[0]['Owner']).strip()
 
+    if api_type == 'UX':
+        api_id = f'{slug(owner)}-{slug(tag)}'
+    else:
+        api_id = slug(tag)
+
     nuevo = reemplazar_info(contenido, api_name, '1.0.0')
     nuevo = reemplazar_tags_rest(nuevo, tag)
     nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-type', api_type)
-    nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-id', slug(tag))
+    nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-id', api_id)
     nuevo = reemplazar_url_servidor(nuevo, construir_server_url(api_type, owner, tag))
     nuevo = reemplazar_bloque_indentado(nuevo, 'paths', construir_paths(grupo, tag, api_type))
-    nuevo = agregar_parametros_header_componentes(nuevo, api_type)
-    nuevo = agregar_componentes_error(nuevo)
+    nuevo = agregar_parametros_componentes(nuevo, api_type, grupo)
+    nuevo = agregar_componentes_error(nuevo, api_type)
     return nuevo
 
 
@@ -662,7 +916,8 @@ def main():
             if estilo == 'rest':
                 nuevo_contenido = procesar_rest(contenido, str(api_name).strip(), tag, grupo)
             elif estilo == 'event-driven':
-                nuevo_contenido = procesar_event_driven(contenido, str(api_name).strip(), tag, grupo)
+                continue
+                #-- nuevo_contenido = procesar_event_driven(contenido, str(api_name).strip(), tag, grupo)
             else:
                 logging.warning(f"Estilo '{estilo}' no soportado para '{repo}'. Se omite.")
                 continue
