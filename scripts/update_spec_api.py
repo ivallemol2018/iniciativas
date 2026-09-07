@@ -897,7 +897,7 @@ def main():
     for api_name, grupo in df.groupby('API', sort=False):
         api_type = str(grupo.iloc[0]['Tipo']).strip()
         if api_type == 'PQL' or api_type == 'PU' or api_type == 'OP' :
-            continuePU
+            continue
 
         parsed = parse_api_name(str(api_name).strip(), api_type)
         if not parsed or parsed['repo_name'] not in repos_creados:
