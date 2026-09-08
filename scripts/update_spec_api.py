@@ -696,6 +696,78 @@ def agregar_parametros_componentes(contenido: str, api_type: str, filas) -> str:
     return agregar_o_actualizar_hijo(contenido, 'components', 'parameters', definiciones)
 
 
+# Verbos de controlador reconocidos al final de un path (ej. '/accounts/{id}/notify'),
+# segun la tabla de nomenclatura de operationId.
+CONTROLADORES_OPERATION_ID = {
+    'search', 'activate', 'authorize', 'configure', 'create', 'retrieve', 'notify', 'remove',
+}
+
+PREFIJO_OPERATION_ID_POR_METODO = {
+    'get': 'get',
+    'patch': 'update',
+    'put': 'replace',
+    'delete': 'delete',
+}
+
+
+def _es_parametro_path(segmento: str) -> str:
+    return segmento.startswith('{') and segmento.endswith('}')
+
+
+def singularizar(palabra: str) -> str:
+    baja = palabra.lower()
+    if baja.endswith('ies') and len(baja) > 3:
+        return palabra[:-3] + 'y'
+    if baja.endswith(('ses', 'xes', 'zes', 'ches', 'shes')):
+        return palabra[:-2]
+    if baja.endswith('s') and not baja.endswith('ss'):
+        return palabra[:-1]
+    return palabra
+
+
+def nombre_recurso_operation_id(segmento: str) -> str:
+    """Convierte un segmento de path (ej. 'customer-offers') al nombre en singular y
+    PascalCase que se usa en el operationId (ej. 'CustomerOffer')."""
+    partes = [p for p in segmento.split('-') if p]
+    if partes:
+        partes[-1] = singularizar(partes[-1])
+    return ''.join(p[0].upper() + p[1:] if p else p for p in partes)
+
+
+def construir_operation_id_rest(metodo: str, endpoint: str) -> str:
+    """Arma el operationId de una operacion REST segun la tabla de nomenclatura:
+    GET/PATCH/PUT/DELETE sobre un recurso usan el prefijo del metodo (get/update/
+    replace/delete) + el nombre del recurso/subrecurso en singular; POST usa 'create'
+    para un recurso nuevo o 'add' para un subrecurso de uno existente; y si el path
+    termina en un verbo de controlador (search, retrieve, notify, etc.) el operationId
+    es ese controlador + el nombre del recurso/subrecurso, sin importar el metodo HTTP."""
+    segmentos = [s for s in endpoint.strip().split('/') if s]
+    if not segmentos:
+        return ''
+    metodo = metodo.strip().lower()
+    ultimo = segmentos[-1]
+
+    if not _es_parametro_path(ultimo) and ultimo.lower() in CONTROLADORES_OPERATION_ID:
+        controlador = ultimo.lower()
+        anteriores = segmentos[:-1]
+        recurso_segmento = anteriores[-1] if anteriores else ultimo
+        if _es_parametro_path(recurso_segmento) and len(anteriores) > 1:
+            recurso_segmento = anteriores[-2]
+        return controlador + nombre_recurso_operation_id(recurso_segmento)
+
+    if _es_parametro_path(ultimo):
+        recurso_segmento = segmentos[-2] if len(segmentos) > 1 else ultimo
+        prefijo = PREFIJO_OPERATION_ID_POR_METODO.get(metodo, metodo)
+        return prefijo + nombre_recurso_operation_id(recurso_segmento)
+
+    if metodo == 'post':
+        tiene_padre = any(_es_parametro_path(s) for s in segmentos[:-1])
+        prefijo = 'add' if tiene_padre else 'create'
+    else:
+        prefijo = PREFIJO_OPERATION_ID_POR_METODO.get(metodo, metodo)
+    return prefijo + nombre_recurso_operation_id(ultimo)
+
+
 def construir_paths(filas, tag, api_type) -> dict:
     paths = {}
     for _, fila in filas.iterrows():
@@ -707,7 +779,8 @@ def construir_paths(filas, tag, api_type) -> dict:
         operacion = {
             'tags': [tag],
             'summary': descripcion,
-            'description': escalar_yaml('[DESCRIPCION_API]')
+            'description': '[DESCRIPCION_ENDPOINT]',
+            'operationId': construir_operation_id_rest(metodo, endpoint),
         }
         parametros = construir_parametros_header(api_type) + construir_parametros_path(endpoint)
         if parametros:
