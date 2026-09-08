@@ -707,8 +707,9 @@ def construir_paths(filas, tag, api_type) -> dict:
         operacion = {
             'tags': [tag],
             'summary': descripcion,
+            'description': escalar_yaml('[DESCRIPCION_API]')
         }
-        parametros = construir_parametros_path(endpoint) + construir_parametros_header(api_type)
+        parametros = construir_parametros_header(api_type) + construir_parametros_path(endpoint)
         if parametros:
             operacion['parameters'] = parametros
         operacion['responses'] = {'200': {'description': 'OK'}}
@@ -732,7 +733,7 @@ def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
     api_type = str(grupo.iloc[0]['Tipo']).strip()
     owner = str(grupo.iloc[0]['Owner']).strip()
 
-    if api_type == 'UX':
+    if api_type == 'UX' or api_type == 'PV':
         api_id = f'{slug(owner)}-{slug(tag)}'
     else:
         api_id = slug(tag)
