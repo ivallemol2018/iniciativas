@@ -648,6 +648,13 @@ def construir_parametros_header(api_type: str) -> list:
     return [{'$ref': f'#/components/parameters/{header}'} for header in headers]
 
 
+def quitar_query_string(endpoint: str) -> str:
+    """El Excel puede traer query params en el Endpoint (ej.
+    '/accounts/{accountId}?id={id}&sort={desc}'); el contrato solo debe considerar el
+    path, asi que se descarta todo desde el primer '?'."""
+    return endpoint.split('?', 1)[0].strip()
+
+
 def extraer_parametros_path(endpoint: str) -> list:
     """Devuelve los nombres de path params de un endpoint, ej. ['accountId'] para
     '/accounts/{accountId}'."""
@@ -678,7 +685,7 @@ def recolectar_definiciones_parametros(filas, api_type: str) -> dict:
     headers = HEADERS_REQUERIDOS_POR_TIPO.get(api_type.strip().upper(), [])
     definiciones = {header: construir_parametro_header_definicion(header) for header in headers}
     for _, fila in filas.iterrows():
-        endpoint = str(fila['Endpoint']).strip()
+        endpoint = quitar_query_string(str(fila['Endpoint']).strip())
         for param in extraer_parametros_path(endpoint):
             clave = nombre_componente_path_param(param)
             definiciones.setdefault(clave, construir_parametro_path_definicion(param))
@@ -771,7 +778,7 @@ def construir_operation_id_rest(metodo: str, endpoint: str) -> str:
 def construir_paths(filas, tag, api_type) -> dict:
     paths = {}
     for _, fila in filas.iterrows():
-        endpoint = str(fila['Endpoint']).strip()
+        endpoint = quitar_query_string(str(fila['Endpoint']).strip())
         metodo = str(fila['Metodo']).strip().lower()
         descripcion = texto_o_vacio(fila['Descripcion del Endpoint'])
         if not endpoint or not metodo:
