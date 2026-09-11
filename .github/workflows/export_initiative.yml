@@ -63,5 +63,5 @@ jobs:
             JSON.stringify(result, null, 2)
          );
 
-         console.log('Exported ${output.length} README.md files');
+         console.log(`Exported ${output.length} README.md files`);
          EOF
