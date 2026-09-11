@@ -18,7 +18,7 @@ jobs:
         run: |
          node <<'EOF'
          const fs = require('fs');
-         const path = requiere('path');
+         const path = require('path');
 
          const rootDir = process.cwd();
          const output = [];
