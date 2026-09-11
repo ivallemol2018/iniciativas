@@ -13,3 +13,55 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+
+      - name: Scan folders and extract README.md
+        run: |
+         node <<'EOF'
+         const fs = require('fs');
+         const path = requiere('path');
+
+         const rootDir = process.cwd();
+         const output = [];
+
+         function walk(dir) {
+           const entries = fs.readdirSync(dir, { withFileTypes: true });
+
+           for (const entry of entries){
+              //Ignorar carpetas internas
+              if (entry.name === '.git' || entry.name === 'node_modules' ) continue;
+
+              const fullPath = path.join(dir, entry.name);
+
+                if(entry.isDirectory()){
+                  const readmePath = path.join(fullPath, 'README.md');
+
+                  if ( fs.existsSync (readmePath)) {
+                    const content = fs.readFileSync(readmePath, 'utf8');
+
+                    output.push({
+                      forder: path.relative(rootDir, fullPath),
+                      readme_path: path.relative(rootDir, readmePath),
+                      content: content
+                    });
+                  }
+                
+                  walk(fullPath);
+                }
+           }
+         }
+
+         walk(rootDir);
+
+         const result = {
+           generated_at: new Date().toISOString(),
+           total_readmes: output.length,
+           readmes: output
+         };
+
+         fs.writeFileSync(
+            'readmes.json',
+            JSON.stringify(result, null, 2)
+         );
+
+         console.log('Exported ${output.length} README.md files');
+         EOF
