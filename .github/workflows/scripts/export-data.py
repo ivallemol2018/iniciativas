@@ -161,7 +161,7 @@ with pd.ExcelWriter(OUTPUT_EXCEL_FILE, engine="openpyxl") as writer:
             ws.cell(row=r, column=c).aligment = Aligment(vertical="center")
 
     # Autp column width (safe)
-    for idx, col_name in enumerate(df.columns, start=1)
+    for idx, col_name in enumerate(df.columns, start=1):
         col_letter = get_column_letter(idx)
         max_len = max(
             len(col_name),
