@@ -3,7 +3,7 @@ import re
 import pandas as pd
 from pathlib import Path
 
-from openpyxl.styles import Font, Border, Side, Aligment, PatternFill
+from openpyxl.styles import Font, Border, Side, Alignment, PatternFill
 from openpyxl.utils import get_column_letter
 
 
@@ -152,13 +152,13 @@ with pd.ExcelWriter(OUTPUT_EXCEL_FILE, engine="openpyxl") as writer:
         cell.fill = header_fill
         cell.font = header_font
         cell.border = border
-        cell.aligment = Aligment(horizontal="center", vertical="center")
+        cell.alignment = Alignment(horizontal="center", vertical="center")
 
     # Body cells
     for r in range(2, ws.max_row + 1):
         for c in range(1, ws.max_column + 1):
             ws.cell(row=r, column=c).border = border
-            ws.cell(row=r, column=c).aligment = Aligment(vertical="center")
+            ws.cell(row=r, column=c).alignment = Alignment(vertical="center")
 
     # Autp column width (safe)
     for idx, col_name in enumerate(df.columns, start=1):
