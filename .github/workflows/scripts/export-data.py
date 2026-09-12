@@ -156,7 +156,7 @@ with pd.ExcelWriter(OUTPUT_EXCEL_FILE, engine="openpyxl") as writer:
 
     # Body cells
     for r in range(2, ws.max_row + 1):
-        for c in range(1, ws.max_column + 1)
+        for c in range(1, ws.max_column + 1):
             ws.cell(row=r, column=c).border = border
             ws.cell(row=r, column=c).aligment = Aligment(vertical="center")
 
