@@ -118,7 +118,7 @@ for readme in readme_data["readmes"]:
             })
             continue
 
-        for ep in api_endpoints
+        for ep in api_endpoints:
             rows.append({
                 "Iniciativa": iniciativa,
                 "Ticket": ticket,
