@@ -82,7 +82,7 @@ jobs:
 
       - name: execute script Python
         run: |
-         cd .github/workflows/scripts/export-data.py
+         python .github/workflows/scripts/export-data.py
 
       - name: Upload JSON result
         uses: actions/upload-artifact@v4
