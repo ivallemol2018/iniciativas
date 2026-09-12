@@ -9,4 +9,4 @@
 
 | API | Owner | Estilo | Tipo | Exposicion | Repositorio |
 |-----|-------|--------|------|------------|-------------|
-| API UX UBAG Test API V1 | UBAG | rest | channel | internal | https://github.com/BCP-APIs/channel-ubag-test-api |
+| API UX UBAG Customer Offer API V1 | UBAG | rest | channel | internal | https://github.com/BCP-APIs/channel-ubag-customer-offer-api |
