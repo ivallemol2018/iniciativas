@@ -33,6 +33,7 @@ FINAL_COLUMNS = [
 # UTILITY FUNCTIONS
 # ===============================================
 def extract_apis_from_readme(content: str):
+    content = content.replace("\r\n", "\n")
     rows = re.findall(
         r"^\|([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)\|([^|]+)\|$",
         content,
