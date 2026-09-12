@@ -65,3 +65,27 @@ jobs:
 
          console.log(`Exported ${output.length} README.md files`);
          EOF
+
+      - name: set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: install Python dependencies
+        run: |
+         pip install pandas openpyxl
+
+      - name: ver repositorio
+        run: |
+         cd .github/workflows/scripts
+         ls -l
+
+      - name: execute script Python
+        run: |
+         cd .github/workflows/scripts/export-data.py
+
+      - name: Upload JSON result
+        uses: actions/upload-artifact@v4
+        with:
+          name: readme-report-excel
+          path: iniciativas_apis.xlsx                 
