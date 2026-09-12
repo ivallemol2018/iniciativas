@@ -39,7 +39,7 @@ jobs:
                     const content = fs.readFileSync(readmePath, 'utf8');
 
                     output.push({
-                      forder: path.relative(rootDir, fullPath),
+                      folder: path.relative(rootDir, fullPath),
                       readme_path: path.relative(rootDir, readmePath),
                       content: content
                     });

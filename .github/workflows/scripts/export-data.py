@@ -73,7 +73,7 @@ def read_endpoints_excel(folder: Path):
     endpoints = []
     for _, row in df.iterrows():
         endpoints.append({
-            "API_KEY": str(row.iloc[0]).strip().uppper(),
+            "API_KEY": str(row.iloc[0]).strip().upper(),
             "Metodo": row.iloc[4],
             "Endpoint": row.iloc[5],
             "Descripcion del Endpoint": row.iloc[6]
@@ -135,7 +135,7 @@ df = pd.DataFrame(rows)[FINAL_COLUMNS]
 # EXPORT TO EXCEL (EXECUTE STYLE)
 # ===============================================
 with pd.ExcelWriter(OUTPUT_EXCEL_FILE, engine="openpyxl") as writer:
-    df.to_excel(writer, index=false, sheet_name="APIs")
+    df.to_excel(writer, index=False, sheet_name="APIs")
     ws = writer.book["APIs"]
 
     ws.freeze_panes = "A2"
