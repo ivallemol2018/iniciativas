@@ -91,7 +91,11 @@ jobs:
 
       - name: execute script Python
         run: |
-         python .github/workflows/scripts/export-data.py
+         if [ "${{ inputs.api_type }}" = "arquitecture" ]; then
+           python .github/workflows/scripts/export-data-arquitecture.py
+         else
+           python .github/workflows/scripts/export-data.py
+         fi
 
       - name: Upload JSON result
         uses: actions/upload-artifact@v4
