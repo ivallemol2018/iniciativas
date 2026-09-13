@@ -15,6 +15,7 @@ READMES_JSON_FILE = "readmes.json"
 OUTPUT_EXCEL_FILE = "iniciativas_apis.xlsx"
 ENDPOINT_FILE_PATTERN = "operation-mapping_*.xlsx"
 PRODUCTIVO_FILE = ".github/workflows/data/reporte_api_productivo.xlsx"
+SSB_CR_BQ_FILE = ".github/workflows/data/reporte_ssb_cr_bq_interno.xlsx"
 
 FINAL_COLUMNS = [
     "API",
@@ -109,6 +110,78 @@ def load_productive_keys(path: str):
     return keys
 
 
+def to_kebab_case(value) -> str:
+    text = normalize_text(value)
+    text = re.sub(r"[^a-z0-9]+", "-", text).strip("-")
+    return text
+
+
+def pluralize(value) -> str:
+    text = "" if value is None else str(value).strip()
+    if not text:
+        return text
+
+    lower = text.lower()
+    if lower.endswith(("s", "x", "z", "ch", "sh")):
+        return text + "es"
+    if lower.endswith("y") and len(text) > 1 and text[-2].lower() not in "aeiou":
+        return text[:-1] + "ies"
+    return text + "s"
+
+
+def extract_path_segments(endpoint) -> list:
+    path = "" if endpoint is None else str(endpoint).strip()
+    path = path.split("?", 1)[0]
+    return [s for s in path.split("/") if s.strip() != ""]
+
+
+def get_recurso_y_subrecurso(endpoint):
+    segments = extract_path_segments(endpoint)
+    recurso = segments[0] if segments else ""
+
+    subrecurso = ""
+    for seg in segments[1:]:
+        if not re.match(r"^\{.*\}$", seg.strip()):
+            subrecurso = seg
+            break
+
+    return recurso, subrecurso
+
+
+def load_ssb_cr_bq_df(path: str):
+    file = Path(path)
+    if not file.exists():
+        return pd.DataFrame(columns=["ssb", "tipo", "cr/bqs"])
+
+    return pd.read_excel(file)
+
+
+def find_ssb_cr_bq_match(api_value, endpoint_value, ssb_df):
+    norm_api = normalize_text(api_value)
+    recurso, subrecurso = get_recurso_y_subrecurso(endpoint_value)
+    recurso_kebab = to_kebab_case(recurso)
+    subrecurso_kebab = to_kebab_case(subrecurso)
+
+    for _, row in ssb_df.iterrows():
+        ssb = row.get("ssb")
+        tipo = row.get("tipo")
+        cr_bq = row.get("cr/bqs")
+
+        if normalize_text(ssb) not in norm_api:
+            continue
+
+        tipo_norm = normalize_text(tipo)
+
+        if tipo_norm == "cr":
+            if to_kebab_case(cr_bq) == recurso_kebab:
+                return ssb, tipo, cr_bq
+        elif tipo_norm == "bq":
+            if to_kebab_case(pluralize(cr_bq)) == subrecurso_kebab:
+                return ssb, tipo, cr_bq
+
+    return None, None, None
+
+
 # ===============================================
 # MAIN PROCESS
 # ===============================================
@@ -157,6 +230,15 @@ for readme in readme_data["readmes"]:
 
 df = pd.DataFrame(rows)[FINAL_COLUMNS]
 df = df.drop_duplicates().reset_index(drop=True)
+
+ssb_cr_bq_df = load_ssb_cr_bq_df(SSB_CR_BQ_FILE)
+ssb_matches = df.apply(
+    lambda row: find_ssb_cr_bq_match(row["API"], row["Endpoint"], ssb_cr_bq_df),
+    axis=1
+)
+df["Service Name"] = ssb_matches.apply(lambda m: m[0])
+df["Tipo CR"] = ssb_matches.apply(lambda m: m[1])
+df["Nombre CR/BQ"] = ssb_matches.apply(lambda m: m[2])
 
 productive_keys = load_productive_keys(PRODUCTIVO_FILE)
 
