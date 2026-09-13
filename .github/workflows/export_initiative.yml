@@ -82,12 +82,23 @@ jobs:
 
       - name: install Python dependencies
         run: |
-         pip install pandas openpyxl
+         pip install pandas openpyxl requests pyyaml
 
       - name: ver repositorio
         run: |
          cd .github/workflows/scripts
          ls -l
+
+      - name: Generar token
+        id: generate_token
+        if: ${{ inputs.api_type == 'arquitecture' }}
+        run: |
+         chmod +x scripts/generate_gat.sh
+         ./scripts/generate_gat.sh
+        env:
+         APP_ID: ${{ vars.GH_APP_ID_ARCHITECTURE_INITIATIVES }}
+         PRIVATE_KEY: ${{ secrets.GH_APP_PK_ARCHITECTURE_INITIATIVES }}
+         ORGANIZATION: ${{ github.repository_owner }}
 
       - name: execute script Python
         run: |
@@ -96,6 +107,9 @@ jobs:
          else
            python .github/workflows/scripts/export-data.py
          fi
+        env:
+         GITHUB_TOKEN: ${{ env.ACCESS_TOKEN }}
+         GITHUB_OWNER: ${{ github.repository_owner }}
 
       - name: Upload JSON result
         uses: actions/upload-artifact@v4

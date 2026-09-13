@@ -1,7 +1,11 @@
+import base64
 import json
+import os
 import re
 import unicodedata
 import pandas as pd
+import requests
+import yaml
 from pathlib import Path
 
 from openpyxl.styles import Font, Border, Side, Alignment, PatternFill
@@ -16,6 +20,15 @@ OUTPUT_EXCEL_FILE = "iniciativas_apis.xlsx"
 ENDPOINT_FILE_PATTERN = "operation-mapping_*.xlsx"
 PRODUCTIVO_FILE = ".github/workflows/data/reporte_api_productivo.xlsx"
 SSB_CR_BQ_FILE = ".github/workflows/data/reporte_ssb_cr_bq_interno.xlsx"
+
+# Repositorios git donde viven los contratos OpenAPI "BIAN". Cada entrada se
+# escanea completa (todos los .yaml/.yml bajo "dir"), ya que el nombre del
+# archivo incluye un sufijo variable (ej. "business-customer-offer-xxxxxxxxxx.yaml").
+BIAN_CONTRACT_REPOS = [
+    {"repo": "ivallemol2018/bcp-api-template-customer-offer", "dir": "api"},
+]
+
+HTTP_METHODS = {"get", "post", "put", "patch", "delete", "options", "head", "trace"}
 
 FINAL_COLUMNS = [
     "API",
@@ -182,6 +195,141 @@ def find_ssb_cr_bq_match(api_value, endpoint_value, ssb_df):
     return None, None, None
 
 
+def extract_bian_service_name(title) -> str:
+    """A partir de un info.title tipo 'API BS Customer Offer xxxxxxxxxx V1',
+    descarta el token de version final ('V1') y el codigo/sufijo variable que
+    lo precede, devolviendo 'API BS Customer Offer'."""
+    tokens = [] if title is None else str(title).strip().split()
+    if tokens and re.match(r"(?i)^v\d+$", tokens[-1]):
+        tokens = tokens[:-1]
+    if tokens:
+        tokens = tokens[:-1]
+    return " ".join(tokens)
+
+
+def pascal_case_to_words(value) -> str:
+    text = "" if value is None else str(value).strip()
+    return re.sub(r"(?<!^)(?<![A-Z])(?=[A-Z])", " ", text)
+
+
+def parse_bian_tag(tag):
+    """Separa un tag tipo 'CR - CustomerOfferProcedure' en ('CR', 'Customer Offer Procedure')."""
+    text = "" if tag is None else str(tag).strip()
+    if " - " not in text:
+        return None, None
+
+    tipo_raw, nombre_raw = text.split(" - ", 1)
+    return tipo_raw.strip(), pascal_case_to_words(nombre_raw.strip())
+
+
+def build_bian_entries(spec: dict, service_name: str) -> list:
+    entries = []
+    if not spec:
+        return entries
+
+    paths = spec.get("paths") or {}
+    for endpoint, operations in paths.items():
+        if not isinstance(operations, dict):
+            continue
+
+        for metodo, operacion in operations.items():
+            if metodo.lower() not in HTTP_METHODS or not isinstance(operacion, dict):
+                continue
+
+            tags = operacion.get("tags") or []
+            if not tags:
+                continue
+
+            tipo, nombre = parse_bian_tag(tags[0])
+            if tipo is None:
+                continue
+
+            entries.append({
+                "service_name": service_name,
+                "metodo": metodo,
+                "endpoint": endpoint,
+                "tipo": tipo,
+                "nombre": nombre,
+            })
+
+    return entries
+
+
+def list_yaml_files(repo: str, directory: str, headers: dict) -> list:
+    url = f"https://api.github.com/repos/{repo}/contents/{directory}"
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        print(f"No se pudo listar '{directory}' en '{repo}': {response.status_code}")
+        return []
+
+    items = response.json()
+    return [
+        item["path"] for item in items
+        if item.get("type") == "file" and item["name"].lower().endswith((".yaml", ".yml"))
+    ]
+
+
+def fetch_yaml_file(repo: str, path: str, headers: dict):
+    url = f"https://api.github.com/repos/{repo}/contents/{path}"
+    response = requests.get(url, headers=headers)
+    if response.status_code != 200:
+        print(f"No se pudo obtener '{path}' en '{repo}': {response.status_code}")
+        return None
+
+    content = base64.b64decode(response.json()["content"]).decode("utf-8")
+    try:
+        return yaml.safe_load(content)
+    except yaml.YAMLError as error:
+        print(f"Error al parsear YAML '{path}' en '{repo}': {error}")
+        return None
+
+
+def load_bian_entries(repos: list) -> list:
+    token = os.getenv("GITHUB_TOKEN")
+    if not token:
+        return []
+
+    headers = {
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/vnd.github+json",
+        "X-GitHub-Api-Version": "2022-11-28",
+    }
+
+    entries = []
+    for repo_config in repos:
+        repo = repo_config["repo"]
+        directory = repo_config.get("dir", "api")
+
+        for file_path in list_yaml_files(repo, directory, headers):
+            spec = fetch_yaml_file(repo, file_path, headers)
+            if not spec:
+                continue
+
+            title = (spec.get("info") or {}).get("title")
+            service_name = extract_bian_service_name(title)
+            entries.extend(build_bian_entries(spec, service_name))
+
+    return entries
+
+
+def find_bian_match(api_value, metodo_value, endpoint_value, bian_entries: list):
+    norm_api = normalize_text(api_value)
+    norm_metodo = normalize_text(metodo_value)
+    norm_endpoint = normalize_endpoint(endpoint_value)
+
+    for entry in bian_entries:
+        if normalize_text(entry["service_name"]) not in norm_api:
+            continue
+        if normalize_text(entry["metodo"]) != norm_metodo:
+            continue
+        if normalize_endpoint(entry["endpoint"]) != norm_endpoint:
+            continue
+
+        return entry["service_name"], entry["tipo"], entry["nombre"]
+
+    return None, None, None
+
+
 # ===============================================
 # MAIN PROCESS
 # ===============================================
@@ -250,6 +398,15 @@ df["Produccion"] = df.apply(
     ) in productive_keys else "NO",
     axis=1
 )
+
+bian_entries = load_bian_entries(BIAN_CONTRACT_REPOS)
+bian_matches = df.apply(
+    lambda row: find_bian_match(row["API"], row["Metodo"], row["Endpoint"], bian_entries),
+    axis=1
+)
+df["Service Name Bian"] = bian_matches.apply(lambda m: m[0])
+df["Tipo Bian"] = bian_matches.apply(lambda m: m[1])
+df["Nombre CR/BQ Bian"] = bian_matches.apply(lambda m: m[2])
 
 
 # ===============================================
