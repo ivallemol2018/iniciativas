@@ -26,6 +26,7 @@ SSB_CR_BQ_FILE = ".github/workflows/data/reporte_ssb_cr_bq_interno.xlsx"
 # archivo incluye un sufijo variable (ej. "business-customer-offer-xxxxxxxxxx.yaml").
 BIAN_CONTRACT_REPOS = [
     {"repo": "ivallemol2018/bcp-api-template-customer-offer", "dir": "api"},
+    {"repo": "ivallemol2018/bcp-api-template-servicing-order", "dir": "api"},
 ]
 
 HTTP_METHODS = {"get", "post", "put", "patch", "delete", "options", "head", "trace"}
