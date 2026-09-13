@@ -319,6 +319,9 @@ def find_bian_match(api_value, metodo_value, endpoint_value, bian_entries: list)
     norm_endpoint = normalize_endpoint(endpoint_value)
 
     for entry in bian_entries:
+        print(f"service_name: {entry["service_name"]}")
+        print(f"service_name: {entry["metodo"]}")
+        print(f"service_name: {entry["endpoint"]}")
         if normalize_text(entry["service_name"]) not in norm_api:
             continue
         if normalize_text(entry["metodo"]) != norm_metodo:
