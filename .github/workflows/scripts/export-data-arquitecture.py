@@ -1,5 +1,6 @@
 import json
 import re
+import unicodedata
 import pandas as pd
 from pathlib import Path
 
@@ -13,6 +14,7 @@ from openpyxl.utils import get_column_letter
 READMES_JSON_FILE = "readmes.json"
 OUTPUT_EXCEL_FILE = "iniciativas_apis.xlsx"
 ENDPOINT_FILE_PATTERN = "operation-mapping_*.xlsx"
+PRODUCTIVO_FILE = ".github/workflows/data/reporte_api_productivo.xlsx"
 
 FINAL_COLUMNS = [
     "API",
@@ -74,6 +76,39 @@ def read_endpoints_excel(folder: Path):
     return endpoints
 
 
+def normalize_text(value) -> str:
+    text = "" if value is None else str(value)
+    text = text.strip().lower()
+    text = unicodedata.normalize("NFKD", text)
+    text = "".join(c for c in text if not unicodedata.combining(c))
+    return text
+
+
+def normalize_endpoint(value) -> str:
+    text = normalize_text(value)
+    # Reemplaza cualquier path parameter (ej. {id}, {clienteId}) por un comodin generico
+    text = re.sub(r"\{[^}]*\}", "{}", text)
+    return text
+
+
+def load_productive_keys(path: str):
+    file = Path(path)
+    if not file.exists():
+        return set()
+
+    df = pd.read_excel(file)
+
+    keys = set()
+    for _, row in df.iterrows():
+        keys.add((
+            normalize_text(row.get("API")),
+            normalize_text(row.get("Metodo")),
+            normalize_endpoint(row.get("Endpoint")),
+        ))
+
+    return keys
+
+
 # ===============================================
 # MAIN PROCESS
 # ===============================================
@@ -122,6 +157,17 @@ for readme in readme_data["readmes"]:
 
 df = pd.DataFrame(rows)[FINAL_COLUMNS]
 df = df.drop_duplicates().reset_index(drop=True)
+
+productive_keys = load_productive_keys(PRODUCTIVO_FILE)
+
+df["Produccion"] = df.apply(
+    lambda row: "SI" if (
+        normalize_text(row["API"]),
+        normalize_text(row["Metodo"]),
+        normalize_endpoint(row["Endpoint"]),
+    ) in productive_keys else "NO",
+    axis=1
+)
 
 
 # ===============================================
