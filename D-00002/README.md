@@ -11,4 +11,4 @@
 |-----|-------|--------|------|------------|-------------|
 | API UX UBAG Saving Account API V1 | UBAG | rest | channel | internal | https://github.com/BCP-APIs/channel-ubag-customer-offer-api |
 | API UX UBAG Customer Offer API V1 | UBAG | rest | channel | internal | https://github.com/BCP-APIs/channel-ubag-customer-offer-api |
-| API BS Customer Offer API V1 | UBAG | rest | business | internal | https://github.com/BCP-APIs/business-ubag-customer-offer-api |
+| API BS Customer Offer V1 | UBAG | rest | business | internal | https://github.com/BCP-APIs/business-ubag-customer-offer-api |
