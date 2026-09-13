@@ -2,6 +2,15 @@ name: Exportar las APIs aprobadada por iniciativa de arquitectura de solucion
 
 on: 
   workflow_dispatch:
+    inputs:
+      api_type:
+        description: "Selecciona el tipo de Reporte de APIs"
+        required: true
+        type: choice
+        options:
+          - business
+          - arquitecture
+
   
 permissions:
   contents: read
