@@ -11,3 +11,4 @@
 |-----|-------|--------|------|------------|-------------|
 | API UX UBAG Customer Offer API V1 | UBAG | rest | channel | internal | https://github.com/BCP-APIs/channel-ubag-customer-offer-api |
 | API BS Servicing Order Bill Paid V1 | UBAG | rest | business | internal | https://github.com/BCP-APIs/business-ubag-servicing-order-api |
+| API BS Customer Credit Rating Paid V1 | UBAG | rest | business | internal | https://github.com/BCP-APIs/business-ubag-servicing-order-api |
