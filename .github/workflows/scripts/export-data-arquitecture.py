@@ -170,30 +170,25 @@ def load_ssb_cr_bq_df(path: str):
     return pd.read_excel(file)
 
 
-def find_ssb_cr_bq_match(api_value, endpoint_value, ssb_df):
+def find_ssb_cr_bq_match(api_value, metodo_value, endpoint_value, ssb_df):
     norm_api = normalize_text(api_value)
-    recurso, subrecurso = get_recurso_y_subrecurso(endpoint_value)
-    recurso_kebab = to_kebab_case(recurso)
-    subrecurso_kebab = to_kebab_case(subrecurso)
+    norm_metodo = normalize_text(metodo_value)
+    norm_endpoint = normalize_endpoint(endpoint_value)
 
     for _, row in ssb_df.iterrows():
-        ssb = row.get("ssb")
-        tipo = row.get("tipo")
-        cr_bq = row.get("cr/bqs")
-
-        if normalize_text(ssb) not in norm_api:
+        row_api = normalize_text(row.get("Api"))
+        if not row_api or normalize_text(row.get("Api")) != norm_api::
             continue
 
-        tipo_norm = normalize_text(tipo)
+        if normalize_text(row.get("Metodo")) != norm_metodo:
+            continue
 
-        if tipo_norm == "cr":
-            if to_kebab_case(cr_bq) == recurso_kebab:
-                return ssb, tipo, cr_bq
-        elif tipo_norm == "bq":
-            if to_kebab_case(pluralize(cr_bq)) == subrecurso_kebab:
-                return ssb, tipo, cr_bq
+        if normalize_endpoint(row.get("Endpoint")) != norm_endpoint:
+            continue
 
-    return None, None, None
+        return row.get("ssb"), row.get("tipo"), row.get("cr/bqs"), row.get("origen")
+
+    return None, None, None, None
 
 
 def extract_bian_service_name(title) -> str:
@@ -385,12 +380,13 @@ df = df.drop_duplicates().reset_index(drop=True)
 
 ssb_cr_bq_df = load_ssb_cr_bq_df(SSB_CR_BQ_FILE)
 ssb_matches = df.apply(
-    lambda row: find_ssb_cr_bq_match(row["API"], row["Endpoint"], ssb_cr_bq_df),
+    lambda row: find_ssb_cr_bq_match(row["API"], row["Metodo"], row["Endpoint"], ssb_cr_bq_df),
     axis=1
 )
-df["Service Name"] = ssb_matches.apply(lambda m: m[0])
+df["SBB"] = ssb_matches.apply(lambda m: m[0])
 df["Tipo CR"] = ssb_matches.apply(lambda m: m[1])
 df["Nombre CR/BQ"] = ssb_matches.apply(lambda m: m[2])
+df["Origen"] = ssb_matches.apply(lambda m: m[3])
 
 productive_keys = load_productive_keys(PRODUCTIVO_FILE)
 
