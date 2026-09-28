@@ -183,7 +183,7 @@ def find_ssb_cr_bq_match(api_value, metodo_value, endpoint_value, ssb_df):
         if normalize_text(row.get("Metodo")) != norm_metodo:
             continue
 
-        if normalize_endpoint(row.get("Endpoint")) != norm_endpoint:
+        if normalize_endpoint(row.get("endpoint")) != norm_endpoint:
             continue
 
         return row.get("ssb"), row.get("tipo"), row.get("cr/bqs"), row.get("origen")
