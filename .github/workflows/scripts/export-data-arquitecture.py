@@ -177,7 +177,7 @@ def find_ssb_cr_bq_match(api_value, metodo_value, endpoint_value, ssb_df):
 
     for _, row in ssb_df.iterrows():
         row_api = normalize_text(row.get("Api"))
-        if not row_api or normalize_text(row.get("Api")) != norm_api::
+        if not row_api or normalize_text(row.get("Api")) != norm_api:
             continue
 
         if normalize_text(row.get("Metodo")) != norm_metodo:
