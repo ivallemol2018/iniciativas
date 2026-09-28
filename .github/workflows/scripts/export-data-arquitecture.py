@@ -308,6 +308,65 @@ def load_bian_entries(repos: list) -> list:
     return entries
 
 
+def style_worksheet(ws, dataframe: pd.DataFrame):
+    """Aplica el mismo estilo (header azul, bordes, autofiltro, ancho de
+    columna) usado para la hoja 'APIs' a cualquier hoja generada a partir de
+    un DataFrame."""
+    ws.freeze_panes = "A2"
+    ws.auto_filter.ref = ws.dimensions
+
+    header_fill = PatternFill("solid", fgColor="1F4E78")
+    header_font = Font(bold=True, color="FFFFFF")
+
+    thin = Side(style="thin", color="D9D9D9")
+    border = Border(left=thin, right=thin, top=thin, bottom=thin)
+
+    for cell in ws[1]:
+        cell.fill = header_fill
+        cell.font = header_font
+        cell.border = border
+        cell.alignment = Alignment(horizontal="center", vertical="center")
+
+    for r in range(2, ws.max_row + 1):
+        for c in range(1, ws.max_column + 1):
+            ws.cell(row=r, column=c).border = border
+            ws.cell(row=r, column=c).alignment = Alignment(vertical="center")
+
+    for idx, col_name in enumerate(dataframe.columns, start=1):
+        col_letter = get_column_letter(idx)
+        max_len = max(
+            len(col_name),
+            dataframe[col_name].fillna("").astype(str).map(len).max()
+        )
+        ws.column_dimensions[col_letter].width = min(max_len + 4, 80)
+
+
+def build_ssb_cr_bq_consolidado(ssb_cr_bq_df: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
+    """Consolida reporte_ssb_cr_bq_interno por (ssb, cr/bqs): 'Esperado' es el
+    conteo de filas registradas en ese reporte, 'Real' es el conteo de filas
+    de iniciativas_api que efectivamente cruzaron con esa combinacion."""
+    esperado_df = (
+        ssb_cr_bq_df.dropna(subset=["ssb", "cr/bqs"])
+        .groupby(["ssb", "cr/bqs"])
+        .size()
+        .reset_index(name="Esperado")
+    )
+
+    real_df = (
+        df.dropna(subset=["SBB", "Nombre CR/BQ"])
+        .groupby(["SBB", "Nombre CR/BQ"])
+        .size()
+        .reset_index(name="Real")
+        .rename(columns={"SBB": "ssb", "Nombre CR/BQ": "cr/bqs"})
+    )
+
+    consolidado_df = esperado_df.merge(real_df, on=["ssb", "cr/bqs"], how="left")
+    consolidado_df["Real"] = consolidado_df["Real"].fillna(0).astype(int)
+    consolidado_df = consolidado_df.sort_values(["ssb", "cr/bqs"]).reset_index(drop=True)
+
+    return consolidado_df
+
+
 def find_bian_match(api_value, metodo_value, endpoint_value, bian_entries: list):
     norm_api = normalize_text(api_value)
     norm_metodo = normalize_text(metodo_value)
@@ -408,43 +467,17 @@ df["Service Name Bian"] = bian_matches.apply(lambda m: m[0])
 df["Tipo Bian"] = bian_matches.apply(lambda m: m[1])
 df["Nombre CR/BQ Bian"] = bian_matches.apply(lambda m: m[2])
 
+ssb_cr_bq_consolidado_df = build_ssb_cr_bq_consolidado(ssb_cr_bq_df, df)
+
 
 # ===============================================
 # EXPORT TO EXCEL (EXECUTE STYLE)
 # ===============================================
 with pd.ExcelWriter(OUTPUT_EXCEL_FILE, engine="openpyxl") as writer:
     df.to_excel(writer, index=False, sheet_name="APIs")
-    ws = writer.book["APIs"]
+    style_worksheet(writer.book["APIs"], df)
 
-    ws.freeze_panes = "A2"
-    ws.auto_filter.ref = ws.dimensions
-
-    # Header style (blue like image)
-    header_fill = PatternFill("solid", fgColor="1F4E78")
-    header_font = Font(bold=True, color="FFFFFF")
-
-    thin  = Side(style="thin", color="D9D9D9")
-    border = Border(left=thin, right=thin, top=thin, bottom=thin)
-
-    for cell in ws[1]:
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.border = border
-        cell.alignment = Alignment(horizontal="center", vertical="center")
-
-    # Body cells
-    for r in range(2, ws.max_row + 1):
-        for c in range(1, ws.max_column + 1):
-            ws.cell(row=r, column=c).border = border
-            ws.cell(row=r, column=c).alignment = Alignment(vertical="center")
-
-    # Autp column width (safe)
-    for idx, col_name in enumerate(df.columns, start=1):
-        col_letter = get_column_letter(idx)
-        max_len = max(
-            len(col_name),
-            df[col_name].fillna("").astype(str).map(len).max()
-        )
-        ws.column_dimensions[col_letter].width = min(max_len + 4, 80)
+    ssb_cr_bq_consolidado_df.to_excel(writer, index=False, sheet_name="SSB CR-BQ")
+    style_worksheet(writer.book["SSB CR-BQ"], ssb_cr_bq_consolidado_df)
 
 print(f"Excel generado exitosamente: {OUTPUT_EXCEL_FILE}")
