@@ -735,11 +735,12 @@ def singularizar(palabra: str) -> str:
     return palabra
 
 
-def nombre_recurso_operation_id(segmento: str) -> str:
-    """Convierte un segmento de path (ej. 'customer-offers') al nombre en singular y
-    PascalCase que se usa en el operationId (ej. 'CustomerOffer')."""
+def nombre_recurso_operation_id(segmento: str, singular: bool = True) -> str:
+    """Convierte un segmento de path (ej. 'customer-offers') al nombre en PascalCase que
+    se usa en el operationId: en singular (ej. 'CustomerOffer') o, con singular=False,
+    conservando el plural de la coleccion (ej. 'CustomerOffers')."""
     partes = [p for p in segmento.split('-') if p]
-    if partes:
+    if partes and singular:
         partes[-1] = singularizar(partes[-1])
     return ''.join(p[0].upper() + p[1:] if p else p for p in partes)
 
@@ -750,7 +751,11 @@ def construir_operation_id_rest(metodo: str, endpoint: str) -> str:
     replace/delete) + el nombre del recurso/subrecurso en singular; POST usa 'create'
     para un recurso nuevo o 'add' para un subrecurso de uno existente; y si el path
     termina en un verbo de controlador (search, retrieve, notify, etc.) el operationId
-    es ese controlador + el nombre del recurso/subrecurso, sin importar el metodo HTTP."""
+    es ese controlador + el nombre del recurso/subrecurso, sin importar el metodo HTTP.
+    En ese caso el recurso va en singular si el controlador actua sobre una instancia
+    (ej. '/processing-orders/{processingOrderId}/retrieve' -> 'retrieveProcessingOrder')
+    y en plural si actua sobre la coleccion (ej. '/processing-orders/retrieve' ->
+    'retrieveProcessingOrders')."""
     segmentos = [s for s in endpoint.strip().split('/') if s]
     if not segmentos:
         return ''
@@ -761,9 +766,10 @@ def construir_operation_id_rest(metodo: str, endpoint: str) -> str:
         controlador = ultimo.lower()
         anteriores = segmentos[:-1]
         recurso_segmento = anteriores[-1] if anteriores else ultimo
-        if _es_parametro_path(recurso_segmento) and len(anteriores) > 1:
+        sobre_instancia = _es_parametro_path(recurso_segmento)
+        if sobre_instancia and len(anteriores) > 1:
             recurso_segmento = anteriores[-2]
-        return controlador + nombre_recurso_operation_id(recurso_segmento)
+        return controlador + nombre_recurso_operation_id(recurso_segmento, singular=sobre_instancia)
 
     if _es_parametro_path(ultimo):
         recurso_segmento = segmentos[-2] if len(segmentos) > 1 else ultimo
