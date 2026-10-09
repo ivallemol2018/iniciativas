@@ -255,16 +255,16 @@ for repo_info in repo_info_array:
     result_list = []
     for item in repos_creados:
         result_list.append({
-            "repo": item["repo"]
-            "owner": item["owner"]
+            "repo": item["repo"],
+            "owner": item["owner"],
             "estado": "creado",
             "motivo": "No Aplica",
             "link": item.get("link", "No Aplica") or "No Aplica"
         })
     for item in repos_no_creados:
         result_list.append({
-            "repo": item["repo"]
-            "owner": item["owner"]
+            "repo": item["repo"],
+            "owner": item["owner"],
             "estado": "no creado",
             "motivo": item.get("link", "No Aplica") or "No Aplica",
             "link": "No Aplica"
