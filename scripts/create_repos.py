@@ -173,7 +173,7 @@ for repo_info in repo_info_array:
                 error_msg = ""
                 try:
                     error_msg = create_ref_response.json().get("message","")
-                except Exception
+                except Exception:
                     error_msg = create_ref_response.text
 
                 if "Reference already exists" in error_msg:
