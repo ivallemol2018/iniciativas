@@ -115,37 +115,37 @@ for repo_info in repo_info_array:
     time.sleep(30)  
 
     if repo_name_lower.startswith(internal_prefixes):
-        # === Crear rama "design" desde "master" ===
+        # === Crear rama "design" desde "main" ===
         print(f" Creando rama 'design' en '{final_name}'...")
 
-        # 1. Obtener SHA de la rama master
-        ref_master_url = f"https://api.github.com/repos/{org_name}/{final_name}/git/ref/heads/master"
+        # 1. Obtener SHA de la rama main
+        ref_main_url = f"https://api.github.com/repos/{org_name}/{final_name}/git/ref/heads/main"
 
-        print(f"[DEBUG] === GET master ref ===")
-        print(f"[DEBUG] URL: {ref_master_url}")
+        print(f"[DEBUG] === GET main ref ===")
+        print(f"[DEBUG] URL: {ref_main_url}")
 
-        ref_response = requests.get(ref_master_url, headers=headers)
+        ref_response = requests.get(ref_main_url, headers=headers)
 
-        print(f"[DEBUG] Status Code (GET master): {ref_response.status_code}")
+        print(f"[DEBUG] Status Code (GET main): {ref_response.status_code}")
 
         try:
             ref_json = ref_response.json()
-            print(f"[DEBUG] Response JSON (GET master):")
+            print(f"[DEBUG] Response JSON (GET main):")
             print(json.dumps(ref_json, indent=2))
         except Exception:
-            print(f"[DEBUG] Response JSON (GET master):")
+            print(f"[DEBUG] Response JSON (GET main):")
             print(ref_response.text)
 
         if ref_response.status_code == 200:
-            master_sha = ref_response.json()["object"]["sha"]
+            main_sha = ref_response.json()["object"]["sha"]
 
-            print(f"[DEBUG] SHA master obtenida: {master_sha}")
+            print(f"[DEBUG] SHA main obtenida: {main_sha}")
 
-            # 2. Crear rama design desde master
+            # 2. Crear rama design desde main
             create_ref_url = f"https://api.github.com/repos/{org_name}/{final_name}/git/refs"
             payload_ref = {
                 "ref": "refs/heads/design",
-                "sha": master_sha
+                "sha": main_sha
             }
 
             print(f"[DEBUG] === POST create design branch ===")
@@ -192,16 +192,16 @@ for repo_info in repo_info_array:
                 continue
 
         else:
-            print(f"No se pudo obtener la rama master para '{final_name}'")
+            print(f"No se pudo obtener la rama main para '{final_name}'")
 
-            print(f"[DEBUG] Status Code (GET master): {ref_response.status_code}")
+            print(f"[DEBUG] Status Code (GET main): {ref_response.status_code}")
 
             try:
                 error_json = ref_response.json()
-                print(f"[DEBUG] Error JSON (GET master):")
+                print(f"[DEBUG] Error JSON (GET main):")
                 print(json.dumps(error_json, indent=2))
             except Exception:
-                print(f"[DEBUG] Error TEXT (GET master):")
+                print(f"[DEBUG] Error TEXT (GET main):")
                 print(ref_response.text)
 
             continue
