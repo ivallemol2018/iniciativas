@@ -152,7 +152,7 @@ for repo_info in repo_info_array:
             print(f"[DEBUG] URL: {create_ref_url}")
             print(f"[DEBUG] Payload: {json.dumps(payload_ref)}")
 
-            create_ref_response = request.post(create_ref_url, headers=headers, json=payload_ref)
+            create_ref_response = requests.post(create_ref_url, headers=headers, json=payload_ref)
 
             print(f"[DEBUG] Status Code (POST create ref): {create_ref_response.status_code}")
 
@@ -212,7 +212,7 @@ for repo_info in repo_info_array:
         "delete_branch_on_merge": True,
         "visibility": "internal"
     }
-    patch_response = request.patch(patch_url, headers=headers, json=patch_payload)
+    patch_response = requests.patch(patch_url, headers=headers, json=patch_payload)
     if patch_response.status_code == 200:
         print("Actualizacion realizada correctamente.")
     else:
