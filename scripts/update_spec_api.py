@@ -18,6 +18,9 @@ ORG = os.getenv('GITHUB_OWNER')
 
 SPEC_SOURCE_PATH = 'api/nombre_repositorio.yaml'
 SPEC_TARGET_TEMPLATE = 'api/{repo}.yaml'
+# Ramas donde se genera la especificacion. 'design' solo existe en repos internos;
+# si no esta presente en el repositorio, se omite.
+RAMAS_DESTINO = ['main', 'design']
 REQUIRED_COLUMNS = ['API', 'Estilo', 'Tipo', 'Owner', 'Metodo', 'Endpoint', 'Descripcion del Endpoint']
 
 METODO_A_OPERACION_ASYNC = {
@@ -906,16 +909,26 @@ def procesar_event_driven(contenido: str, api_name: str, tag: str, grupo) -> str
 
 # --- GitHub Contents API --------------------------------------------------
 
-def obtener_archivo(repo, path):
+def rama_existe(repo, rama):
+    url = f"https://api.github.com/repos/{ORG}/{repo}/branches/{rama}"
+    response = requests.get(url, headers=HEADERS)
+    if response.status_code == 200:
+        return True
+    if response.status_code != 404:
+        logging.error(f"No se pudo verificar la rama '{rama}' en '{repo}': {response.status_code} - {response.text}")
+    return False
+
+
+def obtener_archivo(repo, path, rama):
     url = f"https://api.github.com/repos/{ORG}/{repo}/contents/{path}"
     for intento in range(3):
-        response = requests.get(url, headers=HEADERS)
+        response = requests.get(url, headers=HEADERS, params={'ref': rama})
         if response.status_code == 200:
             try:
                 data = response.json()
             except ValueError:
                 logging.error(
-                    f"Respuesta 200 con cuerpo no-JSON al obtener '{path}' en '{repo}'. "
+                    f"Respuesta 200 con cuerpo no-JSON al obtener '{path}' en '{repo}' (rama '{rama}'). "
                     f"Content-Type: {response.headers.get('Content-Type')}. "
                     f"Cuerpo (primeros 500 chars): {response.text[:500]!r}"
                 )
@@ -927,39 +940,41 @@ def obtener_archivo(repo, path):
             contenido = contenido.replace('\r\n', '\n').replace('\r', '\n')
             return contenido, data['sha']
         if response.status_code == 404 and intento < 2:
-            logging.info(f"'{path}' aun no disponible en '{repo}', reintentando...")
+            logging.info(f"'{path}' aun no disponible en '{repo}' (rama '{rama}'), reintentando...")
             time.sleep(5)
             continue
-        logging.error(f"No se pudo obtener '{path}' en '{repo}': {response.status_code} - {response.text}")
+        logging.error(f"No se pudo obtener '{path}' en '{repo}' (rama '{rama}'): {response.status_code} - {response.text}")
         return None, None
     return None, None
 
 
-def crear_archivo(repo, path, contenido_yaml, mensaje):
+def crear_archivo(repo, path, contenido_yaml, mensaje, rama):
     url = f"https://api.github.com/repos/{ORG}/{repo}/contents/{path}"
     payload = {
         'message': mensaje,
         'content': base64.b64encode(contenido_yaml.encode('utf-8')).decode('utf-8'),
+        'branch': rama,
     }
     response = requests.put(url, headers=HEADERS, json=payload)
     if response.status_code not in (200, 201):
-        logging.error(f"No se pudo crear '{path}' en '{repo}': {response.status_code} - {response.text}")
+        logging.error(f"No se pudo crear '{path}' en '{repo}' (rama '{rama}'): {response.status_code} - {response.text}")
         return False
-    logging.info(f"Especificacion de API creada en '{repo}/{path}'.")
+    logging.info(f"Especificacion de API creada en '{repo}/{path}' (rama '{rama}').")
     return True
 
 
-def eliminar_archivo(repo, path, sha, mensaje):
+def eliminar_archivo(repo, path, sha, mensaje, rama):
     url = f"https://api.github.com/repos/{ORG}/{repo}/contents/{path}"
     payload = {
         'message': mensaje,
         'sha': sha,
+        'branch': rama,
     }
     response = requests.delete(url, headers=HEADERS, json=payload)
     if response.status_code not in (200,):
-        logging.error(f"No se pudo eliminar '{path}' en '{repo}': {response.status_code} - {response.text}")
+        logging.error(f"No se pudo eliminar '{path}' en '{repo}' (rama '{rama}'): {response.status_code} - {response.text}")
         return False
-    logging.info(f"Plantilla '{path}' eliminada de '{repo}'.")
+    logging.info(f"Plantilla '{path}' eliminada de '{repo}' (rama '{rama}').")
     return True
 
 
@@ -991,27 +1006,32 @@ def main():
         destino = SPEC_TARGET_TEMPLATE.format(repo=repo)
         estilo = str(grupo.iloc[0]['Estilo']).strip().lower()
 
-        contenido, sha = obtener_archivo(repo, SPEC_SOURCE_PATH)
-        if contenido is None:
-            continue
-
-        try:
-            if estilo == 'rest':
-                nuevo_contenido = procesar_rest(contenido, str(api_name).strip(), tag, grupo)
-            elif estilo == 'event-driven':
+        for rama in RAMAS_DESTINO:
+            if rama != 'main' and not rama_existe(repo, rama):
+                logging.info(f"La rama '{rama}' no existe en '{repo}'. Se omite.")
                 continue
-                #-- nuevo_contenido = procesar_event_driven(contenido, str(api_name).strip(), tag, grupo)
-            else:
-                logging.warning(f"Estilo '{estilo}' no soportado para '{repo}'. Se omite.")
+
+            contenido, sha = obtener_archivo(repo, SPEC_SOURCE_PATH, rama)
+            if contenido is None:
                 continue
-        except ValueError as error:
-            logging.error(f"No se pudo actualizar la especificacion de '{repo}': {error}")
-            continue
 
-        if not crear_archivo(repo, destino, nuevo_contenido, f"chore: crear especificacion de API {destino}"):
-            continue
+            try:
+                if estilo == 'rest':
+                    nuevo_contenido = procesar_rest(contenido, str(api_name).strip(), tag, grupo)
+                elif estilo == 'event-driven':
+                    continue
+                    #-- nuevo_contenido = procesar_event_driven(contenido, str(api_name).strip(), tag, grupo)
+                else:
+                    logging.warning(f"Estilo '{estilo}' no soportado para '{repo}'. Se omite.")
+                    continue
+            except ValueError as error:
+                logging.error(f"No se pudo actualizar la especificacion de '{repo}' (rama '{rama}'): {error}")
+                continue
 
-        eliminar_archivo(repo, SPEC_SOURCE_PATH, sha, f"chore: eliminar plantilla {SPEC_SOURCE_PATH}")
+            if not crear_archivo(repo, destino, nuevo_contenido, f"chore: crear especificacion de API {destino}", rama):
+                continue
+
+            eliminar_archivo(repo, SPEC_SOURCE_PATH, sha, f"chore: eliminar plantilla {SPEC_SOURCE_PATH}", rama)
 
 
 if __name__ == '__main__':
