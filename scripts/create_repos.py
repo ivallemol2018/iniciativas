@@ -113,6 +113,167 @@ for repo_info in repo_info_array:
         continue
         
     time.sleep(30)  
+
+    if repo_name_lower.startswith(internal_prefixes):
+        # === Crear rama "design" desde "master" ===
+        print(f" Creando rama 'design' en '{final_name}'...")
+
+        # 1. Obtener SHA de la rama master
+        ref_master_url = f"https://api.github.com/repos/{org_name}/{final_name}/git/ref/heads/master"
+
+        print(f"[DEBUG] === GET master ref ===")
+        print(f"[DEBUG] URL: {ref_maste_url}")
+
+        ref_response = requests.get(ref_master_url, headers=headers)
+
+        print(f"[DEBUG] Status Code (GET master): {ref_response.status_code}")
+
+        try:
+            ref_json = ref_response.json()
+            print(f"[DEBUG] Response JSON (GET master):")
+            print(json.dumps(ref_json, indent=2))
+        except Exception:
+            print(f"[DEBUG] Response JSON (GET master):")
+            print(ref_response.text)
+
+        if ref_response.status_code == 200:
+            master_sha = ref_response.json()["object"]["sha"]
+
+            print(f"[DEBUG] SHA master obtenida: {master_sha}")
+
+            # 2. Crear rama design desde master
+            create_ref_url = f"https://api.github.com/repos/{org_name}/{final_name}/git/refs"
+            payload_ref = {
+                "ref": "refs/heads/design",
+                "sha": master_sha
+            }
+
+            print(f"[DEBUG] === POST create design branch ===")
+            print(f"[DEBUG] URL: {create_ref_url}")
+            print(f"[DEBUG] Payload: {json.dumps(payload_ref)}")
+
+            create_ref_response = request.post(create_ref_url, headers=headers, json=payload_ref)
+
+            print(f"[DEBUG] Status Code (POST create ref): {create_ref_response.status_code}")
+
+            try:
+                create_ref_json = create_ref_response.json()
+                print(f"[DEBUG] Response JSON (POST create ref):")
+                print(json.dumps(create_ref_json, indent=2))
+            except Exception:
+                print(f"[DEBUG] Response TEXT (POST create ref):")
+                print(create_ref_response.text)
+
+            # --- Evaluacion ---
+            if create_ref_response.status_code == 201:
+                print(f"Rama 'design' creada exitosamente en '{final_name}'.")
+
+            elif create_ref_response.status_code == 422:
+                # Diferenciar causa real del 422
+                error_msg = ""
+                try:
+                    error_msg = create_ref_response.json().get("message","")
+                except Exception
+                    error_msg = create_ref_response.text
+
+                if "Reference already exists" in error_msg:
+                    print(f" La rama 'design' ya existe en '{final_name}'." )
+                elif "ruleset" in error_msg.lower():
+                    print(f"Ruleset bloqueo la creacion de la rama 'design' en '{final_name}'.")
+                    print(f"[ERROR] Detalle: {error_msg}")
+                else:
+                    print(f"Error 422 no esperado al crear rama design en '{final_name}'.")
+                    print(f"[ERROR] Detalle: {error_msg}")
+                continue
+
+            else:
+                print(f"Error al crear rama design: {create_ref_response.status_code}")
+                print(f"[ERROR] Ver detalle arriba ")
+                continue
+
+        else:
+            print(f"No se pudo obtener la rama master para '{final_name}'")
+
+            print(f"[DEBUG] Status Code (GET master): {ref_response.status_code}")
+
+            try:
+                error_json = ref_response.json()
+                print(f"[DEBUG] Error JSON (GET master):")
+                print(json.dumps(error_json, indent=2))
+            except Exception:
+                print(f"[DEBUG] Error TEXT (GET master):")
+                print(ref_response.text)
+
+            continue
+
+    print(f" Activando delete_branch_on merge y visibilidad...")
+    patch_url = f"https://api.github.com/repos/{org_name}/{final_name}"
+    patch_payload = {
+        "delete_branch_on_merge": True,
+        "visibility": "internal"
+    }
+    patch_response = request.patch(patch_url, headers=headers, json=patch_payload)
+    if patch_response.status_code == 200:
+        print("Actualizacion realizada correctamente.")
+    else:
+        print(f"Error al actualizar: {patch_response.status_code}")
+        try:
+            print(patch_response.json())
+        except Exception:
+            print(patch_response.text)
+        continue
+
+    print(f"Actualizando propiedades personalizadas...")
+    patch_url = f"https://api.github.com/repos/{org_name}/{final_name}/properties/values"
+    api_type_payload(
+        "AsyncAPI" if api_type == "asyncapi"
+        else "partner" if api_type == "private"
+        else api_type
+    )
+    patch_payload = {
+        "properties": [
+            {"property_name": "api_type", "value": api_type_payload},
+            {"property_name": "api_style", "value": api_style},
+            {"property_name": "api_exposure", "value": api_exposure},
+            {"property_name": "repo_creation_origin", "value": repo_creation_origin},
+            {"property_name": "initiative_code", "value": initiative_code},
+            
+        ]
+    }
+    patch_response = requests.patch(patch_url, headers=headers, json=patch_payload)
+    if patch_response.status_code == 204:
+        print("Propiedades personalizadas actualizadas correctamente.")
+    else:
+        print(f"Error al actualizar propiedades: {patch_response.status_code}")
+        try:
+            print(patch_response.json())
+        except Exception:
+            print(patch_response.text)
+        continue
+    
+    # Guardar resultado en variable de entorno REPOS_CREATION_RESULT
+    result_list = []
+    for item in repos_creados:
+        result_list.append({
+            "repo": item["repo"]
+            "owner": item["owner"]
+            "estado": "creado",
+            "motivo": "No Aplica",
+            "link": item.get("link", "No Aplica") or "No Aplica"
+        })
+    for item in repos_no_creados:
+        result_list.append({
+            "repo": item["repo"]
+            "owner": item["owner"]
+            "estado": "no creado",
+            "motivo": item.get("link", "No Aplica") or "No Aplica",
+            "link": "No Aplica"
+        })
+    github_env = os.getenv('GITHUB_ENV', '/github/env')
+    with open(github_env, 'a') as env_file:
+        env_file.write(f"REPOS_CREATION_RESULT={json.dumps(result_list)}\n")
+    print("[LOG] Variable de entorno REPOS_CREATION_RESULT actualizada correctamente.")
+
         
     
     
