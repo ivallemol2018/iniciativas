@@ -122,7 +122,7 @@ for repo_info in repo_info_array:
         ref_master_url = f"https://api.github.com/repos/{org_name}/{final_name}/git/ref/heads/master"
 
         print(f"[DEBUG] === GET master ref ===")
-        print(f"[DEBUG] URL: {ref_maste_url}")
+        print(f"[DEBUG] URL: {ref_master_url}")
 
         ref_response = requests.get(ref_master_url, headers=headers)
 
