@@ -750,7 +750,8 @@ def construir_operation_id_rest(metodo: str, endpoint: str) -> str:
     En ese caso el recurso va en singular si el controlador actua sobre una instancia
     (ej. '/processing-orders/{processingOrderId}/retrieve' -> 'retrieveProcessingOrder')
     y en plural si actua sobre la coleccion (ej. '/processing-orders/retrieve' ->
-    'retrieveProcessingOrders')."""
+    'retrieveProcessingOrders'); si el recurso no tiene plural, la coleccion lleva el
+    sufijo 'List' (ej. '/production/retrieve' -> 'retrieveProductionList')."""
     segmentos = [s for s in endpoint.strip().split('/') if s]
     if not segmentos:
         return ''
@@ -764,7 +765,12 @@ def construir_operation_id_rest(metodo: str, endpoint: str) -> str:
         sobre_instancia = _es_parametro_path(recurso_segmento)
         if sobre_instancia and len(anteriores) > 1:
             recurso_segmento = anteriores[-2]
-        return controlador + nombre_recurso_operation_id(recurso_segmento, singular=sobre_instancia)
+        recurso = nombre_recurso_operation_id(recurso_segmento, singular=sobre_instancia)
+        # Si el recurso no tiene plural (ej. 'production'), la coleccion se distingue
+        # de la instancia con el sufijo 'List' para no repetir el mismo operationId.
+        if not sobre_instancia and recurso == nombre_recurso_operation_id(recurso_segmento):
+            recurso += 'List'
+        return controlador + recurso
 
     if _es_parametro_path(ultimo):
         recurso_segmento = segmentos[-2] if len(segmentos) > 1 else ultimo
