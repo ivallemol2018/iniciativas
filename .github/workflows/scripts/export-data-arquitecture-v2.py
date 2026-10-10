@@ -120,29 +120,33 @@ def style_worksheet(ws, dataframe: pd.DataFrame):
 
 
 def build_ssb_cr_bq_consolidado(ssb_cr_bq_df: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
-    """Consolida reporte_ssb_cr_bq_interno por (ssb, cr/bqs): 'Esperado' es el
-    conteo de filas registradas en ese reporte, 'Real' es el conteo de filas
-    del reporte productivo que efectivamente cruzaron con esa combinacion."""
+    """Consolida reporte_ssb_cr_bq_interno por (SBB, Nombre CR / BQ): el
+    conteo preescrito son las filas registradas en ese reporte y el conteo de
+    produccion son las filas del reporte productivo que cruzaron con esa
+    combinacion."""
+    keys = ["SBB", "Nombre CR / BQ"]
+    esperado_col = "# Endpoints Preescrito en Arquitectura"
+    real_col = "# Endpoints Produccion"
+
     esperado_df = (
-        ssb_cr_bq_df.dropna(subset=["ssb", "cr/bqs"])
-        .groupby(["ssb", "cr/bqs"])
+        ssb_cr_bq_df.rename(columns={"ssb": "SBB", "cr/bqs": "Nombre CR / BQ"})
+        .dropna(subset=keys)
+        .groupby(keys)
         .size()
-        .reset_index(name="Esperado")
+        .reset_index(name=esperado_col)
     )
 
     real_df = (
-        df.dropna(subset=["SBB", "Nombre CR/BQ"])
-        .groupby(["SBB", "Nombre CR/BQ"])
+        df.rename(columns={"Nombre CR/BQ": "Nombre CR / BQ"})
+        .dropna(subset=keys)
+        .groupby(keys)
         .size()
-        .reset_index(name="Real")
-        .rename(columns={"SBB": "ssb", "Nombre CR/BQ": "cr/bqs"})
+        .reset_index(name=real_col)
     )
 
-    consolidado_df = esperado_df.merge(real_df, on=["ssb", "cr/bqs"], how="left")
-    consolidado_df["Real"] = consolidado_df["Real"].fillna(0).astype(int)
-    consolidado_df = consolidado_df.sort_values(["ssb", "cr/bqs"]).reset_index(drop=True)
-
-    return consolidado_df
+    consolidado_df = esperado_df.merge(real_df, on=keys, how="left")
+    consolidado_df[real_col] = consolidado_df[real_col].fillna(0).astype(int)
+    return consolidado_df.sort_values(keys).reset_index(drop=True)
 
 
 # ===============================================
