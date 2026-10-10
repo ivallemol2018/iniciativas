@@ -142,7 +142,7 @@ COMPONENTES_ERROR = {
                 'code': 'ER0006',
                 'description': 'Error interno del servidor',
                 'errorType': 'Technical',
-                'errorDetail': [
+                'exceptionDetails': [
                     {
                         'code': 'TL005',
                         'description': 'Fallo en servicio backend',
@@ -158,7 +158,7 @@ COMPONENTES_ERROR = {
                 'code': 'ER0007',
                 'description': 'Tiempo de espera excedido',
                 'errorType': 'Technical',
-                'errorDetail': [
+                'exceptionDetails': [
                     {
                         'code': 'TL0006',
                         'description': 'Timeout en integracion externa',
@@ -174,7 +174,7 @@ COMPONENTES_ERROR = {
                 'code': 'ER0001',
                 'description': 'Solicitud invalida',
                 'errorType': 'Functional',
-                'errorDetail': [
+                'exceptionDetails': [
                     {
                         'code': 'TL001',
                         'description': 'Error de validacion en el request',
@@ -190,7 +190,7 @@ COMPONENTES_ERROR = {
                 'code': 'ER0002',
                 'description': 'No autorizado',
                 'errorType': 'Functional',
-                'errorDetail': [
+                'exceptionDetails': [
                     {
                         'code': 'TL002',
                         'description': 'Error de autenticacion',
@@ -206,7 +206,7 @@ COMPONENTES_ERROR = {
                 'code': 'ER0003',
                 'description': 'Acceso denegado',
                 'errorType': 'Functional',
-                'errorDetail': [
+                'exceptionDetails': [
                     {
                         'code': 'TL003',
                         'description': 'Error de autorizacion',
@@ -222,7 +222,7 @@ COMPONENTES_ERROR = {
                 'code': 'ER0004',
                 'description': 'Recurso no encontrado',
                 'errorType': 'Functional',
-                'errorDetail': [
+                'exceptionDetails': [
                     {
                         'code': 'TL004',
                         'description': 'Recurso no encontrado',
@@ -238,7 +238,7 @@ COMPONENTES_ERROR = {
                 'code': 'ER0005',
                 'description': 'Limite de solicitudes excedido',
                 'errorType': 'Technical',
-                'errorDetail': [
+                'exceptionDetails': [
                     {
                         'code': 'TL007',
                         'description': 'Limite de solicitudes excedido',
@@ -254,7 +254,7 @@ COMPONENTES_ERROR = {
                 'code': 'ER0008',
                 'description': 'Servicio no disponible',
                 'errorType': 'Technical',
-                'errorDetail': [
+                'exceptionDetails': [
                     {
                         'code': 'TL008',
                         'description': 'Servicio no disponible temporalmente',
@@ -321,12 +321,7 @@ COMPONENTES_ERROR = {
                 'code': {'$ref': '#/components/schemas/Code'},
                 'description': {'$ref': '#/components/schemas/Description'},
                 'path': {'$ref': '#/components/schemas/Path'},
-                'url': {'$ref': '#/components/schemas/Url'},
-                'errorDetail': {
-                    'type': 'array',
-                    'description': 'Contiene la lista de detalles para mayor detalle del error originado',
-                    'items': {'$ref': '#/components/schemas/ApiExceptionDetail'},
-                },
+                'url': {'$ref': '#/components/schemas/Url'}
             },
         },
         'ApiException': {
@@ -337,7 +332,7 @@ COMPONENTES_ERROR = {
                 'code': 'ER0007',
                 'description': 'Error al llamar al servicio',
                 'errorType': 'Functional',
-                'exceptionalDetails': [
+                'exceptionDetails': [
                     {
                         'code': 'TL001',
                         'description': 'Error al llamar al servicio',
@@ -350,7 +345,7 @@ COMPONENTES_ERROR = {
                 'code': {'$ref': '#/components/schemas/Code'},
                 'errorType': {'$ref': '#/components/schemas/ErrorType'},
                 'description': {'$ref': '#/components/schemas/Description'},
-                'errorDetail': {
+                'exceptionDetails': {
                     'type': 'array',
                     'description': 'Contiene la lista de detalles para mayor detalle del error originado',
                     'items': {'$ref': '#/components/schemas/ApiExceptionDetail'},
