@@ -103,7 +103,7 @@ jobs:
       - name: execute script Python
         run: |
          if [ "${{ inputs.api_type }}" = "arquitecture" ]; then
-           python .github/workflows/scripts/export-data-arquitecture.py
+           python .github/workflows/scripts/export-data-arquitecture-v2.py
          else
            python .github/workflows/scripts/export-data.py
          fi
