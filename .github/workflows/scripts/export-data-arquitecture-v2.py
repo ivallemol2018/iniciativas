@@ -127,19 +127,19 @@ def build_ssb_cr_bq_consolidado(ssb_cr_bq_df: pd.DataFrame, df: pd.DataFrame) ->
         ssb_cr_bq_df.dropna(subset=["ssb", "cr/bqs"])
         .groupby(["ssb", "cr/bqs"])
         .size()
-        .reset_index(name="# Endpoints Preescrito en Arquitectura")
+        .reset_index(name="Esperado")
     )
 
     real_df = (
         df.dropna(subset=["SBB", "Nombre CR/BQ"])
         .groupby(["SBB", "Nombre CR/BQ"])
         .size()
-        .reset_index(name="# Endpoints Produccion")
+        .reset_index(name="Real")
         .rename(columns={"SBB": "ssb", "Nombre CR/BQ": "cr/bqs"})
     )
 
-    consolidado_df = esperado_df.merge(real_df, on=["SBB", "Nombre CR / BQ"], how="left")
-    consolidado_df["# Endpoints Produccion"] = consolidado_df["# Endpoints Produccion"].fillna(0).astype(int)
+    consolidado_df = esperado_df.merge(real_df, on=["ssb", "cr/bqs"], how="left")
+    consolidado_df["Real"] = consolidado_df["Real"].fillna(0).astype(int)
     consolidado_df = consolidado_df.sort_values(["ssb", "cr/bqs"]).reset_index(drop=True)
 
     return consolidado_df
