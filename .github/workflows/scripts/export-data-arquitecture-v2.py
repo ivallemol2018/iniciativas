@@ -12,7 +12,7 @@ from openpyxl.utils import get_column_letter
 # ===============================================
 OUTPUT_EXCEL_FILE = "iniciativas_apis.xlsx"
 PRODUCTIVO_FILE = ".github/workflows/data/reporte_api_productivo.xlsx"
-SSB_CR_BQ_FILE = ".github/workflows/data/reporte_ssb_cr_bq_interno.xlsx"
+SBB_CR_BQ_FILE = ".github/workflows/data/reporte_ssb_cr_bq_interno.xlsx"
 
 FINAL_COLUMNS = [
     "API",
@@ -127,19 +127,19 @@ def build_ssb_cr_bq_consolidado(ssb_cr_bq_df: pd.DataFrame, df: pd.DataFrame) ->
         ssb_cr_bq_df.dropna(subset=["ssb", "cr/bqs"])
         .groupby(["ssb", "cr/bqs"])
         .size()
-        .reset_index(name="Esperado")
+        .reset_index(name="# Endpoints Preescrito en Arquitectura")
     )
 
     real_df = (
         df.dropna(subset=["SBB", "Nombre CR/BQ"])
         .groupby(["SBB", "Nombre CR/BQ"])
         .size()
-        .reset_index(name="Real")
+        .reset_index(name="# Endpoints Produccion")
         .rename(columns={"SBB": "ssb", "Nombre CR/BQ": "cr/bqs"})
     )
 
-    consolidado_df = esperado_df.merge(real_df, on=["ssb", "cr/bqs"], how="left")
-    consolidado_df["Real"] = consolidado_df["Real"].fillna(0).astype(int)
+    consolidado_df = esperado_df.merge(real_df, on=["SBB", "Nombre CR / BQ"], how="left")
+    consolidado_df["# Endpoints Produccion"] = consolidado_df["# Endpoints Produccion"].fillna(0).astype(int)
     consolidado_df = consolidado_df.sort_values(["ssb", "cr/bqs"]).reset_index(drop=True)
 
     return consolidado_df
@@ -150,7 +150,7 @@ def build_ssb_cr_bq_consolidado(ssb_cr_bq_df: pd.DataFrame, df: pd.DataFrame) ->
 # ===============================================
 df = load_productive_apis(PRODUCTIVO_FILE)
 
-ssb_cr_bq_df = load_ssb_cr_bq_df(SSB_CR_BQ_FILE)
+ssb_cr_bq_df = load_ssb_cr_bq_df(SBB_CR_BQ_FILE)
 ssb_matches = df.apply(
     lambda row: find_ssb_cr_bq_match(row["API"], row["Metodo"], row["Endpoint"], ssb_cr_bq_df),
     axis=1
@@ -167,10 +167,10 @@ ssb_cr_bq_consolidado_df = build_ssb_cr_bq_consolidado(ssb_cr_bq_df, df)
 # EXPORT TO EXCEL (EXECUTE STYLE)
 # ===============================================
 with pd.ExcelWriter(OUTPUT_EXCEL_FILE, engine="openpyxl") as writer:
-    df.to_excel(writer, index=False, sheet_name="APIs")
-    style_worksheet(writer.book["APIs"], df)
+    df.to_excel(writer, index=False, sheet_name="Consolidado")
+    style_worksheet(writer.book["Consolidado"], df)
 
-    ssb_cr_bq_consolidado_df.to_excel(writer, index=False, sheet_name="SSB CR-BQ")
-    style_worksheet(writer.book["SSB CR-BQ"], ssb_cr_bq_consolidado_df)
+    ssb_cr_bq_consolidado_df.to_excel(writer, index=False, sheet_name="Resumen")
+    style_worksheet(writer.book["Resumen"], ssb_cr_bq_consolidado_df)
 
 print(f"Excel generado exitosamente: {OUTPUT_EXCEL_FILE}")
