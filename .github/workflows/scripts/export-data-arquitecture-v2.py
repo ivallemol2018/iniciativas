@@ -81,7 +81,7 @@ def find_ssb_cr_bq_match(api_value, metodo_value, endpoint_value, ssb_df):
         if normalize_endpoint(row.get("endpoint")) != norm_endpoint:
             continue
 
-        return row.get("ssb"), row.get("tipo"), row.get("cr/bqs"), row.get("origen")
+        return row.get("ssb"), row.get("tipo"), row.get("cr/bqs"), row.get("dominio")
 
     return None, None, None, None
 
@@ -159,10 +159,11 @@ ssb_matches = df.apply(
     lambda row: find_ssb_cr_bq_match(row["API"], row["Metodo"], row["Endpoint"], ssb_cr_bq_df),
     axis=1
 )
+df["Dominio"] = ssb_matches.apply(lambda m: m[3])
 df["SBB"] = ssb_matches.apply(lambda m: m[0])
-df["Tipo CR"] = ssb_matches.apply(lambda m: m[1])
+df["CR/BQ"] = ssb_matches.apply(lambda m: m[1])
 df["Nombre CR/BQ"] = ssb_matches.apply(lambda m: m[2])
-df["Origen"] = ssb_matches.apply(lambda m: m[3])
+
 
 ssb_cr_bq_consolidado_df = build_ssb_cr_bq_consolidado(ssb_cr_bq_df, df)
 
