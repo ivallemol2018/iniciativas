@@ -13,6 +13,7 @@ from openpyxl.utils import get_column_letter
 OUTPUT_EXCEL_FILE = "iniciativas_apis.xlsx"
 PRODUCTIVO_FILE = ".github/workflows/data/reporte_api_productivo.xlsx"
 SBB_CR_BQ_FILE = ".github/workflows/data/reporte_ssb_cr_bq_interno.xlsx"
+BIAN_RECORDS_FILE = ".github/workflows/data/bian_records_mapping_v1.xlsx"
 
 FINAL_COLUMNS = [
     "API",
@@ -39,6 +40,12 @@ def normalize_endpoint(value) -> str:
     return text
 
 
+def normalize_endpoint_path(value) -> str:
+    """Igual que normalize_endpoint, pero descartando los query params."""
+    path = "" if value is None else str(value)
+    return normalize_endpoint(path.split("?", 1)[0])
+
+
 def load_productive_apis(path: str) -> pd.DataFrame:
     file = Path(path)
     if not file.exists():
@@ -63,6 +70,58 @@ def load_productive_apis(path: str) -> pd.DataFrame:
     return df
 
 
+def merge_bian_records(df: pd.DataFrame, path: str) -> pd.DataFrame:
+    """Cruza bian_records_mapping con las filas ya registradas: si existe
+    (apiName contenido en API, mismo metodo y mismo endpoint sin query params
+    y con path params como comodin) marca 'Validacion Semantica' = Si; si no
+    existe, inserta la fila con 'Validacion Semantica' = Si y 'Produccion' = No.
+    Solo se consideran las filas con 'aplica' = SI."""
+    file = Path(path)
+    if not file.exists():
+        raise FileNotFoundError(f"No se encontro el reporte BIAN: {path}")
+
+    bian_df = pd.read_excel(file)
+
+    required = ["apiName", "method", "endpoint"]
+    missing = [c for c in required + ["aplica"] if c not in bian_df.columns]
+    if missing:
+        raise ValueError(f"Columnas faltantes en '{path}': {missing}")
+
+    bian_df = bian_df[bian_df["aplica"].map(normalize_text) == "si"]
+
+    rows = df.to_dict("records")
+    keys = [
+        (normalize_text(r["API"]), normalize_text(r["Metodo"]), normalize_endpoint_path(r["Endpoint"]))
+        for r in rows
+    ]
+
+    for _, bian in bian_df.dropna(subset=required).iterrows():
+        api_name = normalize_text(bian["apiName"])
+        metodo = normalize_text(bian["method"])
+        endpoint = normalize_endpoint_path(bian["endpoint"])
+
+        matches = [
+            i for i, (k_api, k_metodo, k_endpoint) in enumerate(keys)
+            if api_name in k_api and k_metodo == metodo and k_endpoint == endpoint
+        ]
+
+        if matches:
+            for i in matches:
+                rows[i]["Validacion Semantica"] = "Si"
+            continue
+
+        rows.append({
+            "API": str(bian["apiName"]).strip(),
+            "Metodo": str(bian["method"]).strip(),
+            "Endpoint": str(bian["endpoint"]).strip(),
+            "Validacion Semantica": "Si",
+            "Produccion": "No",
+        })
+        keys.append((api_name, metodo, endpoint))
+
+    return pd.DataFrame(rows, columns=df.columns)
+
+
 def load_ssb_cr_bq_df(path: str):
     file = Path(path)
     if not file.exists():
@@ -77,8 +136,10 @@ def find_ssb_cr_bq_match(api_value, metodo_value, endpoint_value, ssb_df):
     norm_endpoint = normalize_endpoint(endpoint_value)
 
     for _, row in ssb_df.iterrows():
+        # Basta que la API registrada (o el apiName BIAN insertado) este
+        # contenida en la API del reporte SSB
         row_api = normalize_text(row.get("Api"))
-        if not row_api or row_api != norm_api:
+        if not norm_api or not row_api or norm_api not in row_api:
             continue
 
         if normalize_text(row.get("Metodo")) != norm_metodo:
@@ -127,12 +188,11 @@ def style_worksheet(ws, dataframe: pd.DataFrame):
 
 def build_ssb_cr_bq_consolidado(ssb_cr_bq_df: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
     """Consolida reporte_ssb_cr_bq_interno por (SBB, Nombre CR / BQ): el
-    conteo preescrito son las filas registradas en ese reporte y el conteo de
-    produccion son las filas del reporte productivo que cruzaron con esa
-    combinacion."""
+    conteo preescrito son las filas registradas en ese reporte; los conteos de
+    produccion y validacion semantica son las filas cruzadas con esa
+    combinacion que tienen 'Produccion' = Si y 'Validacion Semantica' = Si."""
     keys = ["SBB", "Nombre CR / BQ"]
     esperado_col = "# Endpoints Preescrito en Arquitectura"
-    real_col = "# Endpoints Produccion"
 
     esperado_df = (
         ssb_cr_bq_df.rename(columns={"ssb": "SBB", "cr/bqs": "Nombre CR / BQ"})
@@ -142,16 +202,22 @@ def build_ssb_cr_bq_consolidado(ssb_cr_bq_df: pd.DataFrame, df: pd.DataFrame) ->
         .reset_index(name=esperado_col)
     )
 
-    real_df = (
-        df.rename(columns={"Nombre CR/BQ": "Nombre CR / BQ"})
-        .dropna(subset=keys)
-        .groupby(keys)
-        .size()
-        .reset_index(name=real_col)
-    )
+    cruzado_df = df.rename(columns={"Nombre CR/BQ": "Nombre CR / BQ"}).dropna(subset=keys)
 
-    consolidado_df = esperado_df.merge(real_df, on=keys, how="left")
-    consolidado_df[real_col] = consolidado_df[real_col].fillna(0).astype(int)
+    consolidado_df = esperado_df
+    for flag_col, count_col in [
+        ("Produccion", "# Endpoints Produccion"),
+        ("Validacion Semantica", "# Endpoints Validacion Semantica"),
+    ]:
+        count_df = (
+            cruzado_df[cruzado_df[flag_col] == "Si"]
+            .groupby(keys)
+            .size()
+            .reset_index(name=count_col)
+        )
+        consolidado_df = consolidado_df.merge(count_df, on=keys, how="left")
+        consolidado_df[count_col] = consolidado_df[count_col].fillna(0).astype(int)
+
     return consolidado_df.sort_values(keys).reset_index(drop=True)
 
 
@@ -159,6 +225,7 @@ def build_ssb_cr_bq_consolidado(ssb_cr_bq_df: pd.DataFrame, df: pd.DataFrame) ->
 # MAIN PROCESS
 # ===============================================
 df = load_productive_apis(PRODUCTIVO_FILE)
+df = merge_bian_records(df, BIAN_RECORDS_FILE)
 
 ssb_cr_bq_df = load_ssb_cr_bq_df(SBB_CR_BQ_FILE)
 ssb_matches = df.apply(
