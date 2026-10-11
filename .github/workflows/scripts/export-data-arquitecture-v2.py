@@ -187,12 +187,12 @@ def style_worksheet(ws, dataframe: pd.DataFrame):
 
 
 def fill_column(ws, dataframe: pd.DataFrame, col_name: str, color: str):
-    """Pinta el fondo de las celdas de datos de una columna (el header
-    conserva el estilo de style_worksheet)."""
+    """Pinta el fondo del header de una columna; la fuente pasa a azul oscuro
+    para que se lea sobre el color claro."""
     col_idx = dataframe.columns.get_loc(col_name) + 1
-    fill = PatternFill("solid", fgColor=color)
-    for r in range(2, ws.max_row + 1):
-        ws.cell(row=r, column=col_idx).fill = fill
+    header = ws.cell(row=1, column=col_idx)
+    header.fill = PatternFill("solid", fgColor=color)
+    header.font = Font(bold=True, color="1F4E78")
 
 
 def build_ssb_cr_bq_consolidado(ssb_cr_bq_df: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
