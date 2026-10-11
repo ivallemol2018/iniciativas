@@ -186,6 +186,15 @@ def style_worksheet(ws, dataframe: pd.DataFrame):
         ws.column_dimensions[col_letter].width = min(max_len + 4, 80)
 
 
+def fill_column(ws, dataframe: pd.DataFrame, col_name: str, color: str):
+    """Pinta el fondo de las celdas de datos de una columna (el header
+    conserva el estilo de style_worksheet)."""
+    col_idx = dataframe.columns.get_loc(col_name) + 1
+    fill = PatternFill("solid", fgColor=color)
+    for r in range(2, ws.max_row + 1):
+        ws.cell(row=r, column=col_idx).fill = fill
+
+
 def build_ssb_cr_bq_consolidado(ssb_cr_bq_df: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
     """Consolida reporte_ssb_cr_bq_interno por (SBB, Nombre CR / BQ): el
     conteo preescrito son las filas registradas en ese reporte; los conteos de
@@ -247,8 +256,12 @@ ssb_cr_bq_consolidado_df = build_ssb_cr_bq_consolidado(ssb_cr_bq_df, df)
 with pd.ExcelWriter(OUTPUT_EXCEL_FILE, engine="openpyxl") as writer:
     df.to_excel(writer, index=False, sheet_name="Consolidado")
     style_worksheet(writer.book["Consolidado"], df)
+    fill_column(writer.book["Consolidado"], df, "Validacion Semantica", "E4DFEC")
+    fill_column(writer.book["Consolidado"], df, "Produccion", "E2EFDA")
 
     ssb_cr_bq_consolidado_df.to_excel(writer, index=False, sheet_name="Resumen")
     style_worksheet(writer.book["Resumen"], ssb_cr_bq_consolidado_df)
+    fill_column(writer.book["Resumen"], ssb_cr_bq_consolidado_df, "# Endpoints Validacion Semantica", "E4DFEC")
+    fill_column(writer.book["Resumen"], ssb_cr_bq_consolidado_df, "# Endpoints Produccion", "E2EFDA")
 
 print(f"Excel generado exitosamente: {OUTPUT_EXCEL_FILE}")
