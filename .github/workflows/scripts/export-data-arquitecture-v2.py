@@ -153,12 +153,31 @@ def find_ssb_cr_bq_match(api_value, metodo_value, endpoint_value, ssb_df):
     return None, None, None, None
 
 
-def style_worksheet(ws, dataframe: pd.DataFrame):
+def add_group_header(ws, dataframe: pd.DataFrame, groups: dict):
+    """Arma un header de 2 filas sobre una hoja escrita con startrow=1: cada
+    grupo ({titulo: [columnas]}) se combina horizontalmente en la fila 1 sobre
+    sus columnas, y las columnas sin grupo se combinan verticalmente (filas 1-2)."""
+    grouped = set()
+    for title, cols in groups.items():
+        first = dataframe.columns.get_loc(cols[0]) + 1
+        last = dataframe.columns.get_loc(cols[-1]) + 1
+        ws.cell(row=1, column=first).value = title
+        ws.merge_cells(start_row=1, start_column=first, end_row=1, end_column=last)
+        grouped.update(cols)
+
+    for idx, col_name in enumerate(dataframe.columns, start=1):
+        if col_name in grouped:
+            continue
+        ws.cell(row=1, column=idx).value = col_name
+        ws.merge_cells(start_row=1, start_column=idx, end_row=2, end_column=idx)
+
+
+def style_worksheet(ws, dataframe: pd.DataFrame, header_rows: int = 1):
     """Aplica el mismo estilo (header azul, bordes, autofiltro, ancho de
-    columna) usado para la hoja 'APIs' a cualquier hoja generada a partir de
-    un DataFrame."""
-    ws.freeze_panes = "A2"
-    ws.auto_filter.ref = ws.dimensions
+    columna) a cualquier hoja generada a partir de un DataFrame. 'header_rows'
+    indica cuantas filas ocupa el header (el autofiltro va en la ultima)."""
+    ws.freeze_panes = f"A{header_rows + 1}"
+    ws.auto_filter.ref = f"A{header_rows}:{get_column_letter(ws.max_column)}{ws.max_row}"
 
     header_fill = PatternFill("solid", fgColor="1F4E78")
     header_font = Font(bold=True, color="FFFFFF")
@@ -166,13 +185,14 @@ def style_worksheet(ws, dataframe: pd.DataFrame):
     thin = Side(style="thin", color="D9D9D9")
     border = Border(left=thin, right=thin, top=thin, bottom=thin)
 
-    for cell in ws[1]:
-        cell.fill = header_fill
-        cell.font = header_font
-        cell.border = border
-        cell.alignment = Alignment(horizontal="center", vertical="center")
+    for r in range(1, header_rows + 1):
+        for cell in ws[r]:
+            cell.fill = header_fill
+            cell.font = header_font
+            cell.border = border
+            cell.alignment = Alignment(horizontal="center", vertical="center")
 
-    for r in range(2, ws.max_row + 1):
+    for r in range(header_rows + 1, ws.max_row + 1):
         for c in range(1, ws.max_column + 1):
             ws.cell(row=r, column=c).border = border
             ws.cell(row=r, column=c).alignment = Alignment(vertical="center")
@@ -186,11 +206,14 @@ def style_worksheet(ws, dataframe: pd.DataFrame):
         ws.column_dimensions[col_letter].width = min(max_len + 4, 80)
 
 
-def fill_column(ws, dataframe: pd.DataFrame, col_name: str, color: str):
+def fill_column(ws, dataframe: pd.DataFrame, col_name: str, color: str, header_rows: int = 1):
     """Pinta el fondo del header de una columna (la fuente blanca en negrita
-    se conserva de style_worksheet)."""
+    se conserva de style_worksheet). Con header de 2 filas, la fila 1 de una
+    columna agrupada es la celda del grupo, que toma el mismo color."""
     col_idx = dataframe.columns.get_loc(col_name) + 1
-    ws.cell(row=1, column=col_idx).fill = PatternFill("solid", fgColor=color)
+    fill = PatternFill("solid", fgColor=color)
+    for r in range(1, header_rows + 1):
+        ws.cell(row=r, column=col_idx).fill = fill
 
 
 def build_ssb_cr_bq_consolidado(ssb_cr_bq_df: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
@@ -252,14 +275,18 @@ ssb_cr_bq_consolidado_df = build_ssb_cr_bq_consolidado(ssb_cr_bq_df, df)
 # EXPORT TO EXCEL (EXECUTE STYLE)
 # ===============================================
 with pd.ExcelWriter(OUTPUT_EXCEL_FILE, engine="openpyxl") as writer:
-    df.to_excel(writer, index=False, sheet_name="Consolidado")
-    style_worksheet(writer.book["Consolidado"], df)
-    fill_column(writer.book["Consolidado"], df, "Validacion Semantica", "3B1A74")
-    fill_column(writer.book["Consolidado"], df, "Produccion", "1F6E24")
-    fill_column(writer.book["Consolidado"], df, "Dominio", "F54927")
-    fill_column(writer.book["Consolidado"], df, "SBB", "F54927")
-    fill_column(writer.book["Consolidado"], df, "CR/BQ", "F54927")
-    fill_column(writer.book["Consolidado"], df, "Nombre CR/BQ", "F54927")
+    df.to_excel(writer, index=False, sheet_name="Consolidado", startrow=1)
+    ws_consolidado = writer.book["Consolidado"]
+    add_group_header(ws_consolidado, df, {
+        "Preescrito en Arquitectura de Solucion": ["Dominio", "SBB", "CR/BQ", "Nombre CR/BQ"],
+    })
+    style_worksheet(ws_consolidado, df, header_rows=2)
+    fill_column(ws_consolidado, df, "Validacion Semantica", "3B1A74", header_rows=2)
+    fill_column(ws_consolidado, df, "Produccion", "1F6E24", header_rows=2)
+    fill_column(ws_consolidado, df, "Dominio", "F54927", header_rows=2)
+    fill_column(ws_consolidado, df, "SBB", "F54927", header_rows=2)
+    fill_column(ws_consolidado, df, "CR/BQ", "F54927", header_rows=2)
+    fill_column(ws_consolidado, df, "Nombre CR/BQ", "F54927", header_rows=2)
 
     ssb_cr_bq_consolidado_df.to_excel(writer, index=False, sheet_name="Resumen")
     style_worksheet(writer.book["Resumen"], ssb_cr_bq_consolidado_df)
