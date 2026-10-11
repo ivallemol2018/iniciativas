@@ -217,22 +217,24 @@ def fill_column(ws, dataframe: pd.DataFrame, col_name: str, color: str, header_r
 
 
 def build_ssb_cr_bq_consolidado(ssb_cr_bq_df: pd.DataFrame, df: pd.DataFrame) -> pd.DataFrame:
-    """Consolida reporte_ssb_cr_bq_interno por (SBB, Nombre CR / BQ): el
-    conteo preescrito son las filas registradas en ese reporte; los conteos de
-    produccion y validacion semantica son las filas cruzadas con esa
+    """Consolida reporte_ssb_cr_bq_interno por (Dominio, SBB, Nombre CR / BQ):
+    el conteo preescrito son las filas registradas en ese reporte; los conteos
+    de produccion y validacion semantica son las filas cruzadas con esa
     combinacion que tienen 'Produccion' = Si y 'Validacion Semantica' = Si."""
-    keys = ["SBB", "Nombre CR / BQ"]
+    keys = ["Dominio", "SBB", "Nombre CR / BQ"]
+    required = ["SBB", "Nombre CR / BQ"]
     esperado_col = "# Endpoints Preescrito en Arquitectura"
 
     esperado_df = (
-        ssb_cr_bq_df.rename(columns={"ssb": "SBB", "cr/bqs": "Nombre CR / BQ"})
-        .dropna(subset=keys)
-        .groupby(keys)
+        ssb_cr_bq_df.rename(columns={"dominio": "Dominio", "ssb": "SBB", "cr/bqs": "Nombre CR / BQ"})
+        .reindex(columns=keys)
+        .dropna(subset=required)
+        .groupby(keys, dropna=False)
         .size()
         .reset_index(name=esperado_col)
     )
 
-    cruzado_df = df.rename(columns={"Nombre CR/BQ": "Nombre CR / BQ"}).dropna(subset=keys)
+    cruzado_df = df.rename(columns={"Nombre CR/BQ": "Nombre CR / BQ"}).dropna(subset=required)
 
     consolidado_df = esperado_df
     for flag_col, count_col in [
@@ -241,7 +243,7 @@ def build_ssb_cr_bq_consolidado(ssb_cr_bq_df: pd.DataFrame, df: pd.DataFrame) ->
     ]:
         count_df = (
             cruzado_df[cruzado_df[flag_col] == "Si"]
-            .groupby(keys)
+            .groupby(keys, dropna=False)
             .size()
             .reset_index(name=count_col)
         )
@@ -290,6 +292,7 @@ with pd.ExcelWriter(OUTPUT_EXCEL_FILE, engine="openpyxl") as writer:
 
     ssb_cr_bq_consolidado_df.to_excel(writer, index=False, sheet_name="Resumen")
     style_worksheet(writer.book["Resumen"], ssb_cr_bq_consolidado_df)
+    fill_column(writer.book["Resumen"], ssb_cr_bq_consolidado_df, "Dominio", "F54927")
     fill_column(writer.book["Resumen"], ssb_cr_bq_consolidado_df, "SBB", "F54927")
     fill_column(writer.book["Resumen"], ssb_cr_bq_consolidado_df, "Nombre CR / BQ", "F54927")
     fill_column(writer.book["Resumen"], ssb_cr_bq_consolidado_df, "# Endpoints Preescrito en Arquitectura", "F54927")
