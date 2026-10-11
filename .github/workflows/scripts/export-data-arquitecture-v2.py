@@ -54,7 +54,13 @@ def load_productive_apis(path: str) -> pd.DataFrame:
     for col in FINAL_COLUMNS:
         df[col] = df[col].astype(str).str.strip()
 
-    return df.drop_duplicates().reset_index(drop=True)
+    df = df.drop_duplicates().reset_index(drop=True)
+
+    # Todo lo que proviene del reporte productivo ya esta en produccion
+    df["Validacion Semantica"] = None
+    df["Produccion"] = "Si"
+
+    return df
 
 
 def load_ssb_cr_bq_df(path: str):
