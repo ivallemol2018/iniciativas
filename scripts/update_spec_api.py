@@ -643,13 +643,32 @@ def reemplazar_url_servidor(contenido: str, url: str) -> str:
     return nuevo
 
 
+SUFIJO_COMPONENTE_HEADER = 'Header'
+
+
+def nombre_componente_header(header: str) -> str:
+    """Clave del header en 'components.parameters': PascalCase + sufijo 'Header'.
+    Las siglas tambien van en PascalCase y se conserva el resto de cada parte, ej.
+    'Request-ID' -> 'RequestIdHeader', 'caller-name' -> 'CallerNameHeader',
+    'callerName' -> 'CallerNameHeader'. El 'name' del parametro conserva el nombre
+    HTTP original, que es lo que envia el cliente."""
+    partes = [p for p in re.split(r'[-_\s]+', header.strip()) if p]
+    nombre = ''.join(
+        p.capitalize() if p.isupper() else p[0].upper() + p[1:]
+        for p in partes
+    )
+    if not nombre.endswith(SUFIJO_COMPONENTE_HEADER):
+        nombre += SUFIJO_COMPONENTE_HEADER
+    return nombre
+
+
 def construir_parametro_header_definicion(header: str) -> dict:
     return {'name': header, 'in': 'header', 'required': True, 'schema': {'type': 'string'}}
 
 
 def construir_parametros_header(api_type: str) -> list:
     headers = HEADERS_REQUERIDOS_POR_TIPO.get(api_type.strip().upper(), [])
-    return [{'$ref': f'#/components/parameters/{header}'} for header in headers]
+    return [{'$ref': f'#/components/parameters/{nombre_componente_header(header)}'} for header in headers]
 
 
 def quitar_query_string(endpoint: str) -> str:
@@ -687,9 +706,12 @@ def recolectar_definiciones_parametros(filas, api_type: str) -> dict:
     por las operaciones (headers segun 'api_type' + path params de cada endpoint), para
     escribir 'components.parameters' de una sola vez sin pisar entradas ya agregadas."""
     headers = HEADERS_REQUERIDOS_POR_TIPO.get(api_type.strip().upper(), [])
-    definiciones = {header: construir_parametro_header_definicion(header) for header in headers}
+    definiciones = {
+        nombre_componente_header(header): construir_parametro_header_definicion(header)
+        for header in headers
+    }
     for _, fila in filas.iterrows():
-        endpoint = quitar_query_string(str(fila['Endpoint']).strip())
+        endpoint = quitar_query_string(texto_o_vacio(fila['Endpoint']))
         for param in extraer_parametros_path(endpoint):
             clave = nombre_componente_path_param(param)
             definiciones.setdefault(clave, construir_parametro_path_definicion(param))
