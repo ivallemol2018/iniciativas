@@ -68,7 +68,7 @@ COMPONENTES_ERROR = {
                 },
             },
         },
-        'BadRequest': {
+        '400BadRequestResponse': {
             'description': 'La solicitud enviada no es valida. Por favor revise los parametros o el cuerpo de la peticion.',
             'content': {
                 'application/json': {
@@ -357,7 +357,7 @@ COMPONENTES_ERROR = {
 
 # Codigo HTTP -> nombre del 'components.responses' que toda operacion REST referencia.
 RESPUESTAS_ERROR_POR_CODIGO = {
-    '400': 'BadRequest',
+    '400': '400BadRequestResponse',
     '401': 'Unauthorized',
     '403': 'Forbidden',
     '404': 'NotFound',
