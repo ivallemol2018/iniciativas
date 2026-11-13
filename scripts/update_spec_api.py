@@ -62,6 +62,14 @@ COMPONENTES_ERROR = {
                 },
             },
         },
+        '502BadGatewayResponse': {
+            'description': 'El servicio recibio una respuesta invalida del backend. Por favor intente nuevamente mas tarde.',
+            'content': {
+                'application/json': {
+                    'schema': {'$ref': '#/components/schemas/ApiException'}
+                },
+            },
+        },
         '504GatewayTimeoutResponse': {
             'description': 'El tiempo de espera para recibir una respuesta del  backend ha expirado',
             'content': {
@@ -344,41 +352,55 @@ RESPUESTAS_ERROR_POR_CODIGO = {
     '504': '504GatewayTimeoutResponse',
 }
 
-# Respuestas de exito adicionales de cada operacion: codigo HTTP -> 'description'.
-# Cada operacion referencia un componente propio '{codigo}{OperationId}Response'
-# con esquema vacio, para completarse al disenar el contrato.
+# Respuestas de exito adicionales de cada operacion. Cada operacion referencia un
+# componente propio '{codigo}{OperationId}Response' en 'components.responses', cuyo
+# esquema es a su vez un componente '{OperationId}{sufijo_schema}' en
+# 'components.schemas', vacio ({}) para completarse al disenar el contrato.
 RESPUESTAS_EXITO_ADICIONALES = {
-    '201': 'Created',
-    '202': 'Accepted',
+    '201': {'description': 'Created', 'sufijo_schema': 'CreatedResponse'},
+    '202': {'description': 'Accepted', 'sufijo_schema': 'AcceptedResponse'},
 }
+
+
+def _pascal(operation_id: str) -> str:
+    """PascalCase minimo de un operationId en camelCase: solo sube la primera letra."""
+    return operation_id[0].upper() + operation_id[1:] if operation_id else ''
 
 
 def nombre_componente_respuesta(codigo: str, operation_id: str) -> str:
     """Ej. ('201', 'initiateSavingsAccounts') -> '201InitiateSavingsAccountsResponse'."""
-    pascal = operation_id[0].upper() + operation_id[1:] if operation_id else ''
-    return f'{codigo}{pascal}Response'
+    return f'{codigo}{_pascal(operation_id)}Response'
 
 
-def construir_respuesta_exito_definicion(descripcion: str) -> dict:
+def nombre_schema_respuesta(codigo: str, operation_id: str) -> str:
+    """Ej. ('201', 'initiateSavingsAccounts') -> 'InitiateSavingsAccountsCreatedResponse'."""
+    return _pascal(operation_id) + RESPUESTAS_EXITO_ADICIONALES[codigo]['sufijo_schema']
+
+
+def construir_respuesta_exito_definicion(descripcion: str, nombre_schema: str) -> dict:
     return {
         'description': descripcion,
-        'content': {'application/json': {'schema': {}}},
+        'content': {'application/json': {'schema': {'$ref': f'#/components/schemas/{nombre_schema}'}}},
     }
 
 
 def recolectar_respuestas_exito(paths: dict) -> dict:
-    """Definiciones de 'components.responses' para las respuestas 201/202 de cada
-    operacion, a partir de los operationId ya generados en 'paths' (asi los nombres
-    coinciden exactamente con los '$ref')."""
-    definiciones = {}
+    """Componentes de las respuestas 201/202 de cada operacion, como
+    {'responses': {...}, 'schemas': {...}}. Se arman en un solo recorrido de 'paths' a
+    partir de los operationId ya generados, para que los nombres de respuesta, esquema
+    y '$ref' coincidan siempre."""
+    responses, schemas = {}, {}
     for endpoint, operaciones in paths.items():
         for metodo, operacion in operaciones.items():
-            for codigo, descripcion in RESPUESTAS_EXITO_ADICIONALES.items():
-                nombre = nombre_componente_respuesta(codigo, operacion['operationId'])
-                if nombre in definiciones:
+            operation_id = operacion['operationId']
+            for codigo, config in RESPUESTAS_EXITO_ADICIONALES.items():
+                nombre = nombre_componente_respuesta(codigo, operation_id)
+                nombre_schema = nombre_schema_respuesta(codigo, operation_id)
+                if nombre in responses:
                     logging.warning(f"operationId duplicado: el componente '{nombre}' ya existe ({metodo.upper()} {endpoint}).")
-                definiciones[nombre] = construir_respuesta_exito_definicion(descripcion)
-    return definiciones
+                responses[nombre] = construir_respuesta_exito_definicion(config['description'], nombre_schema)
+                schemas[nombre_schema] = {}
+    return {'responses': responses, 'schemas': schemas}
 
 HEADERS = {
     "Authorization": f"Bearer {TOKEN}",
@@ -591,18 +613,28 @@ def construir_componentes_error(api_type: str) -> dict:
     }
 
 
-def agregar_componentes_respuestas(contenido: str, api_type: str, respuestas_adicionales: dict | None = None) -> str:
+def agregar_componentes_respuestas(contenido: str, api_type: str, adicionales: dict | None = None) -> str:
     """Agrega bajo 'components' los schemas y respuestas estandar de error, para que las
     operaciones puedan referenciar '500'/'504' contra un contrato comun, junto con las
-    respuestas adicionales de cada operacion (ej. 201/202).
+    respuestas y schemas adicionales de cada operacion (ej. 201/202), recibidos como
+    {'responses': {...}, 'schemas': {...}}.
 
-    'agregar_o_actualizar_hijo' reemplaza el bloque 'components.responses' completo, por
-    eso ambas fuentes se fusionan antes de escribirlo: escribirlas por separado haria que
-    la segunda borrara a la primera. Las de exito van primero (2xx antes que 4xx/5xx)."""
+    'agregar_o_actualizar_hijo' reemplaza los bloques 'components.schemas' y
+    'components.responses' completos, por eso ambas fuentes se fusionan antes de
+    escribirlos: escribirlas por separado haria que la segunda borrara a la primera.
+    Las de exito van primero (2xx antes que 4xx/5xx)."""
+    adicionales = adicionales or {}
+    schemas_adicionales = adicionales.get('schemas', {})
     componentes_error = construir_componentes_error(api_type)
-    responses = {**(respuestas_adicionales or {}), **componentes_error['responses']}
+
+    colisiones = set(schemas_adicionales) & set(componentes_error['schemas'])
+    if colisiones:
+        raise ValueError(f"Esquemas de respuesta que chocan con el contrato de error: {sorted(colisiones)}")
+
+    schemas = {**schemas_adicionales, **componentes_error['schemas']}
+    responses = {**adicionales.get('responses', {}), **componentes_error['responses']}
     contenido = asegurar_clave_raiz(contenido, 'components')
-    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'schemas', componentes_error['schemas'])
+    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'schemas', schemas)
     contenido = agregar_o_actualizar_hijo(contenido, 'components', 'responses', responses)
     # contenido = agregar_o_actualizar_hijo(contenido, 'components', 'examples', componentes_error['examples'])
     return contenido
