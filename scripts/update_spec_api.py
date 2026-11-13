@@ -46,25 +46,27 @@ HEADERS_REQUERIDOS_POR_TIPO = {
 # para que cada endpoint pueda referenciar '500'/'504' contra un mismo contrato de error.
 COMPONENTES_ERROR = {
     'responses': {
-        'InternalServerError': {
+        '500InternalServerErrorResponse': {
             'description': 'El servicio lanzo algun error. Por favor contactarse con soporte Tecnico. Por favor, comuniquese con su administrador.',
             'content': {
                 'application/json': {
-                    'schema': {'$ref': '#/components/schemas/ApiException'},
-                    'examples': {
-                        'internalServerErrorExample': {'$ref': '#/components/examples/InternalServerErrorExample'},
-                    },
+                    'schema': {'$ref': '#/components/schemas/ApiException'}
                 },
             },
         },
-        'GatewayTimeout': {
+        '501NotImplementedResponse': {
+            'description': 'El servicio lanzo algun error. Por favor contactarse con soporte Tecnico. Por favor, comuniquese con su administrador.',
+            'content': {
+                'application/json': {
+                    'schema': {'$ref': '#/components/schemas/ApiException'}
+                },
+            },
+        },
+        '504GatewayTimeoutResponse': {
             'description': 'El tiempo de espera para recibir una respuesta del  backend ha expirado',
             'content': {
                 'application/json': {
-                    'schema': {'$ref': '#/components/schemas/ApiException'},
-                    'examples': {
-                        'internalServerErrorExample': {'$ref': '#/components/examples/GatewayTimeoutExample'},
-                    },
+                    'schema': {'$ref': '#/components/schemas/ApiException'}
                 },
             },
         },
@@ -72,65 +74,39 @@ COMPONENTES_ERROR = {
             'description': 'La solicitud enviada no es valida. Por favor revise los parametros o el cuerpo de la peticion.',
             'content': {
                 'application/json': {
-                    'schema': {'$ref': '#/components/schemas/ApiException'},
-                    'examples': {
-                        'badRequestExample': {'$ref': '#/components/examples/BadRequestExample'},
-                    },
+                    'schema': {'$ref': '#/components/schemas/ApiException'}
                 },
             },
         },
-        'Unauthorized': {
+        '401UnauthorizedResponse': {
             'description': 'No se pudo autenticar la solicitud. Por favor verifique las credenciales proporcionadas.',
             'content': {
                 'application/json': {
-                    'schema': {'$ref': '#/components/schemas/ApiException'},
-                    'examples': {
-                        'unauthorizedExample': {'$ref': '#/components/examples/UnauthorizedExample'},
-                    },
+                    'schema': {'$ref': '#/components/schemas/ApiException'}
                 },
             },
         },
-        'Forbidden': {
-            'description': 'No cuenta con los permisos necesarios para acceder a este recurso.',
-            'content': {
-                'application/json': {
-                    'schema': {'$ref': '#/components/schemas/ApiException'},
-                    'examples': {
-                        'forbiddenExample': {'$ref': '#/components/examples/ForbiddenExample'},
-                    },
-                },
-            },
-        },
-        'NotFound': {
+        '404NotFoundResponse': {
             'description': 'El recurso solicitado no fue encontrado.',
             'content': {
                 'application/json': {
-                    'schema': {'$ref': '#/components/schemas/ApiException'},
-                    'examples': {
-                        'notFoundExample': {'$ref': '#/components/examples/NotFoundExample'},
-                    },
+                    'schema': {'$ref': '#/components/schemas/ApiException'}
                 },
             },
         },
-        'TooManyRequests': {
+        '429TooManyRequestsResponse': {
             'description': 'Se supero el limite de solicitudes permitidas. Por favor intente nuevamente mas tarde.',
             'content': {
                 'application/json': {
-                    'schema': {'$ref': '#/components/schemas/ApiException'},
-                    'examples': {
-                        'tooManyRequestsExample': {'$ref': '#/components/examples/TooManyRequestsExample'},
-                    },
+                    'schema': {'$ref': '#/components/schemas/ApiException'}
                 },
             },
         },
-        'ServiceUnavailable': {
+        '503ServiceUnavailableResponse': {
             'description': 'El servicio no se encuentra disponible en este momento. Por favor intente nuevamente mas tarde.',
             'content': {
                 'application/json': {
-                    'schema': {'$ref': '#/components/schemas/ApiException'},
-                    'examples': {
-                        'serviceUnavailableExample': {'$ref': '#/components/examples/ServiceUnavailableExample'},
-                    },
+                    'schema': {'$ref': '#/components/schemas/ApiException'}
                 },
             },
         },
@@ -358,13 +334,14 @@ COMPONENTES_ERROR = {
 # Codigo HTTP -> nombre del 'components.responses' que toda operacion REST referencia.
 RESPUESTAS_ERROR_POR_CODIGO = {
     '400': '400BadRequestResponse',
-    '401': 'Unauthorized',
-    '403': 'Forbidden',
-    '404': 'NotFound',
-    '429': 'TooManyRequests',
-    '500': 'InternalServerError',
-    '503': 'ServiceUnavailable',
-    '504': 'GatewayTimeout',
+    '401': '401UnauthorizedResponse',
+    '404': '404NotFoundResponse',
+    '429': '429TooManyRequestsResponse',
+    '500': '500InternalServerErrorResponse',
+    '501': '501NotImplementedResponse',
+    '502': '502BadGatewayResponse',
+    '503': '503ServiceUnavailableResponse',
+    '504': '504GatewayTimeoutResponse',
 }
 
 HEADERS = {
@@ -584,8 +561,8 @@ def agregar_componentes_error(contenido: str, api_type: str) -> str:
     componentes_error = construir_componentes_error(api_type)
     contenido = asegurar_clave_raiz(contenido, 'components')
     contenido = agregar_o_actualizar_hijo(contenido, 'components', 'responses', componentes_error['responses'])
-    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'examples', componentes_error['examples'])
-    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'schemas', componentes_error['schemas'])
+    # contenido = agregar_o_actualizar_hijo(contenido, 'components', 'examples', componentes_error['examples'])
+    # contenido = agregar_o_actualizar_hijo(contenido, 'components', 'schemas', componentes_error['schemas'])
     return contenido
 
 
