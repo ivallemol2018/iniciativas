@@ -429,7 +429,7 @@ def slug(texto: str) -> str:
 
 def reemplazar_info(contenido: str, title: str, version: str) -> str:
     title_esc = escalar_yaml(title)
-    descripcion_esc = escalar_yaml('[DESCRIPCION_API]')
+    descripcion_esc = escalar_yaml('[INGRESAR_AQUI_DESCRIPCION_API]')
     contenido, n_title = re.subn(r'(?m)^(\s*title:\s*).*$', lambda m: m.group(1) + title_esc, contenido, count=1)
     contenido, n_description = re.subn(r'(?m)^(\s*description:\s*).*$', lambda m: m.group(1) + descripcion_esc, contenido, count=1)
     contenido, n_version = re.subn(r'(?m)^(\s*version:\s*).*$', lambda m: m.group(1) + version, contenido, count=1)
@@ -447,28 +447,43 @@ def reemplazar_clave_simple(contenido: str, clave: str, valor: str) -> str:
     return nuevo
 
 
-def encontrar_bloque(lineas: list, clave: str):
-    """Ubica una clave 'clave:' (a cualquier nivel de indentacion) y el rango de lineas
-    de su bloque hijo, comparando indentacion en vez de asumir que es una clave raiz o
-    que su contenido llega hasta el final del archivo."""
+def _pertenece_al_bloque(linea: str, indent: int) -> bool:
+    """Indica si una linea no vacia forma parte del bloque hijo de una clave con
+    indentacion 'indent': o esta mas indentada, o es un item de una secuencia YAML
+    'compacta' (guion al mismo nivel que la clave, ej. 'tags:\\n- name: X')."""
+    indent_linea = len(linea) - len(linea.lstrip(' \t'))
+    if indent_linea > indent:
+        return True
+    contenido = linea.lstrip(' \t')
+    return indent_linea == indent and (contenido == '-' or contenido.startswith('- '))
+
+
+def _fin_de_bloque(lineas: list, inicio: int, limite: int, indent: int) -> int:
+    fin = inicio + 1
+    for j in range(inicio + 1, limite):
+        siguiente = lineas[j]
+        if siguiente.strip() == '' or _pertenece_al_bloque(siguiente, indent):
+            fin = j + 1
+            continue
+        break
+    return fin
+
+
+def encontrar_bloque(lineas: list, clave: str, indent_esperado: int | None = None):
+    """Ubica una clave 'clave:' y el rango de lineas de su bloque hijo, comparando
+    indentacion en vez de asumir que su contenido llega hasta el final del archivo.
+    Por defecto acepta la clave a cualquier nivel; con 'indent_esperado' (ej. 0 para
+    claves raiz) ignora las homonimas a otro nivel, como el 'tags' de una operacion
+    frente al 'tags' global."""
     patron = re.compile(rf'^(\s*){re.escape(clave)}:\s*$')
     for i, linea in enumerate(lineas):
         m = patron.match(linea)
         if not m:
             continue
         indent = len(m.group(1))
-        fin = i + 1
-        for j in range(i + 1, len(lineas)):
-            siguiente = lineas[j]
-            if siguiente.strip() == '':
-                fin = j + 1
-                continue
-            indent_siguiente = len(siguiente) - len(siguiente.lstrip(' \t'))
-            if indent_siguiente > indent:
-                fin = j + 1
-                continue
-            break
-        return i, fin, indent
+        if indent_esperado is not None and indent != indent_esperado:
+            continue
+        return i, _fin_de_bloque(lineas, i, len(lineas), indent), indent
     return None
 
 
@@ -483,18 +498,7 @@ def encontrar_hijo_directo(lineas: list, inicio: int, fin: int, indent_esperado:
         m = patron.match(lineas[i])
         if not m or len(m.group(1)) != indent_esperado:
             continue
-        f = i + 1
-        for j in range(i + 1, fin):
-            siguiente = lineas[j]
-            if siguiente.strip() == '':
-                f = j + 1
-                continue
-            indent_siguiente = len(siguiente) - len(siguiente.lstrip(' \t'))
-            if indent_siguiente > indent_esperado:
-                f = j + 1
-                continue
-            break
-        return i, f
+        return i, _fin_de_bloque(lineas, i, fin, indent_esperado)
     return None
 
 
@@ -528,7 +532,7 @@ def asegurar_clave_raiz(contenido: str, clave: str) -> str:
     final del archivo si no esta presente. La plantilla base REST no trae 'components',
     a diferencia de la de AsyncAPI que ya trae 'messageTraits' bajo ese nodo."""
     lineas = contenido.split('\n')
-    if encontrar_bloque(lineas, clave):
+    if encontrar_bloque(lineas, clave, indent_esperado=0):
         return contenido
     while lineas and lineas[-1].strip() == '':
         lineas.pop()
@@ -585,16 +589,18 @@ def agregar_componentes_error(contenido: str, api_type: str) -> str:
     return contenido
 
 
-def reemplazar_bloque_indentado(contenido: str, clave: str, datos: dict, vacio: str = '{}') -> str:
-    """Regenera por completo el bloque hijo de 'clave' a partir de un dict, sin importar
-    su indentacion ni si tiene contenido despues (a diferencia de 'paths' en la plantilla
-    REST, 'channels'/'messages' en la de AsyncAPI no quedan al final del archivo).
+def reemplazar_bloque_indentado(contenido: str, clave: str, datos, vacio: str = '{}',
+                                indent_esperado: int | None = None) -> str:
+    """Regenera por completo el bloque hijo de 'clave' a partir de un dict o una lista,
+    sin importar su indentacion ni si tiene contenido despues (a diferencia de 'paths'
+    en la plantilla REST, 'channels'/'messages' en la de AsyncAPI no quedan al final
+    del archivo).
 
-    Regenerar desde el dict (en vez de duplicar texto ya existente en el archivo) es lo
-    que hace esto idempotente ante reruns del workflow (ej. push adicional al PR).
+    Regenerar desde los datos (en vez de duplicar texto ya existente en el archivo) es
+    lo que hace esto idempotente ante reruns del workflow (ej. push adicional al PR).
     """
     lineas = contenido.split('\n')
-    encontrado = encontrar_bloque(lineas, clave)
+    encontrado = encontrar_bloque(lineas, clave, indent_esperado)
     if not encontrado:
         raise ValueError(f"No se encontro la clave '{clave}' en la plantilla.")
     inicio, fin, indent = encontrado
@@ -705,6 +711,8 @@ def agregar_parametros_componentes(contenido: str, api_type: str, filas) -> str:
 # segun la tabla de nomenclatura de operationId.
 CONTROLADORES_OPERATION_ID = {
     'search', 'activate', 'authorize', 'configure', 'create', 'retrieve', 'notify', 'remove',
+    'initiate', 'update', 'delete', 'cancel', 'validate', 'calculate', 'simulate',
+    'register', 'execute', 'evaluate', 'approve', 'reject', 'send',
 }
 
 PREFIJO_OPERATION_ID_POR_METODO = {
@@ -715,7 +723,7 @@ PREFIJO_OPERATION_ID_POR_METODO = {
 }
 
 
-def _es_parametro_path(segmento: str) -> str:
+def _es_parametro_path(segmento: str) -> bool:
     return segmento.startswith('{') and segmento.endswith('}')
 
 
@@ -785,16 +793,62 @@ def construir_operation_id_rest(metodo: str, endpoint: str) -> str:
     return prefijo + nombre_recurso_operation_id(ultimo)
 
 
+DESCRIPCION_TAG = 'Funcionalidades relacionadas con [INGRESAR_AQUI_DESCRIPCION_ESPANOL_RECURSO].'
+
+
+def segmento_recurso(endpoint: str) -> str | None:
+    """Devuelve el recurso o subrecurso sobre el que actua un endpoint: el primer
+    segmento, leyendo de derecha a izquierda, que no es un path param ni un verbo de
+    controlador. Ej. '/savings-accounts/{id}/account-transactions/retrieve' ->
+    'account-transactions'. None si no hay ninguno (ej. '/retrieve' o '/{id}')."""
+    segmentos = [s for s in quitar_query_string(endpoint).split('/') if s]
+    for segmento in reversed(segmentos):
+        if _es_parametro_path(segmento) or segmento.lower() in CONTROLADORES_OPERATION_ID:
+            continue
+        return segmento
+    return None
+
+
+def nombre_tag_recurso(segmento: str) -> str:
+    """Convierte un segmento de path al nombre de tag: palabras separadas por espacio,
+    capitalizadas y con la ultima en singular. Ej. 'savings-accounts' -> 'Savings Account'."""
+    partes = [p for p in segmento.split('-') if p]
+    if partes:
+        partes[-1] = singularizar(partes[-1])
+    return ' '.join(p[0].upper() + p[1:] for p in partes)
+
+
+def construir_tag_endpoint(endpoint: str, tag_por_defecto: str) -> str:
+    segmento = segmento_recurso(endpoint)
+    if not segmento:
+        logging.warning(f"No se pudo derivar el recurso del endpoint '{endpoint}'; se usa el tag '{tag_por_defecto}'.")
+        return tag_por_defecto
+    return nombre_tag_recurso(segmento)
+
+
+def recolectar_tags(paths: dict) -> list:
+    """Tags usados por las operaciones, sin duplicados y en orden de aparicion."""
+    tags = []
+    for operaciones in paths.values():
+        for operacion in operaciones.values():
+            for tag in operacion.get('tags', []):
+                if tag not in tags:
+                    tags.append(tag)
+    return tags
+
+
 def construir_paths(filas, tag, api_type) -> dict:
+    """'tag' es el tag derivado del nombre de la API; solo se usa como respaldo cuando
+    un endpoint no tiene un recurso identificable."""
     paths = {}
     for _, fila in filas.iterrows():
-        endpoint = quitar_query_string(str(fila['Endpoint']).strip())
-        metodo = str(fila['Metodo']).strip().lower()
+        endpoint = quitar_query_string(texto_o_vacio(fila['Endpoint']))
+        metodo = texto_o_vacio(fila['Metodo']).lower()
         descripcion = texto_o_vacio(fila['Descripcion del Endpoint'])
         if not endpoint or not metodo:
             continue
         operacion = {
-            'tags': [tag],
+            'tags': [construir_tag_endpoint(endpoint, tag)],
             'summary': descripcion,
             'description': '[DESCRIPCION_ENDPOINT]',
             'operationId': construir_operation_id_rest(metodo, endpoint),
@@ -809,14 +863,12 @@ def construir_paths(filas, tag, api_type) -> dict:
     return paths
 
 
-def reemplazar_tags_rest(contenido: str, tag: str) -> str:
-    tag_esc = escalar_yaml(tag)
-    descripcion_esc = escalar_yaml(f'{tag} Controller')
-    patron = re.compile(r'(?m)^tags:\n(\s*-\s*name:\s*).*\n(\s*description:\s*).*$')
-    nuevo, n = patron.subn(lambda m: f"tags:\n{m.group(1)}{tag_esc}\n{m.group(2)}{descripcion_esc}", contenido, count=1)
-    if not n:
-        raise ValueError("No se encontro el bloque 'tags' en la plantilla REST.")
-    return nuevo
+def reemplazar_tags_rest(contenido: str, tags: list) -> str:
+    """Regenera el bloque 'tags' raiz con un item por recurso/subrecurso. Solo se busca
+    a indentacion 0 para no tocar el 'tags' de alguna operacion de ejemplo en 'paths'."""
+    datos = [{'name': tag, 'description': DESCRIPCION_TAG} for tag in tags]
+    contenido = asegurar_clave_raiz(contenido, 'tags')
+    return reemplazar_bloque_indentado(contenido, 'tags', datos, vacio='[]', indent_esperado=0)
 
 
 def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
@@ -828,12 +880,17 @@ def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
     else:
         api_id = slug(tag)
 
+    # 'tag' (derivado del nombre de la API) sigue definiendo api-id y URL del servidor;
+    # los tags del contrato salen de los recursos/subrecursos de cada endpoint.
+    paths = construir_paths(grupo, tag, api_type)
+    tags = recolectar_tags(paths) or [tag]
+
     nuevo = reemplazar_info(contenido, api_name, '1.0.0')
-    nuevo = reemplazar_tags_rest(nuevo, tag)
+    nuevo = reemplazar_tags_rest(nuevo, tags)
     nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-type', api_type)
     nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-id', api_id)
     nuevo = reemplazar_url_servidor(nuevo, construir_server_url(api_type, owner, tag))
-    nuevo = reemplazar_bloque_indentado(nuevo, 'paths', construir_paths(grupo, tag, api_type))
+    nuevo = reemplazar_bloque_indentado(nuevo, 'paths', paths)
     nuevo = agregar_parametros_componentes(nuevo, api_type, grupo)
     nuevo = agregar_componentes_error(nuevo, api_type)
     return nuevo
