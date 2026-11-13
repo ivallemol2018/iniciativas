@@ -344,6 +344,42 @@ RESPUESTAS_ERROR_POR_CODIGO = {
     '504': '504GatewayTimeoutResponse',
 }
 
+# Respuestas de exito adicionales de cada operacion: codigo HTTP -> 'description'.
+# Cada operacion referencia un componente propio '{codigo}{OperationId}Response'
+# con esquema vacio, para completarse al disenar el contrato.
+RESPUESTAS_EXITO_ADICIONALES = {
+    '201': 'Created',
+    '202': 'Accepted',
+}
+
+
+def nombre_componente_respuesta(codigo: str, operation_id: str) -> str:
+    """Ej. ('201', 'initiateSavingsAccounts') -> '201InitiateSavingsAccountsResponse'."""
+    pascal = operation_id[0].upper() + operation_id[1:] if operation_id else ''
+    return f'{codigo}{pascal}Response'
+
+
+def construir_respuesta_exito_definicion(descripcion: str) -> dict:
+    return {
+        'description': descripcion,
+        'content': {'application/json': {'schema': {}}},
+    }
+
+
+def recolectar_respuestas_exito(paths: dict) -> dict:
+    """Definiciones de 'components.responses' para las respuestas 201/202 de cada
+    operacion, a partir de los operationId ya generados en 'paths' (asi los nombres
+    coinciden exactamente con los '$ref')."""
+    definiciones = {}
+    for endpoint, operaciones in paths.items():
+        for metodo, operacion in operaciones.items():
+            for codigo, descripcion in RESPUESTAS_EXITO_ADICIONALES.items():
+                nombre = nombre_componente_respuesta(codigo, operacion['operationId'])
+                if nombre in definiciones:
+                    logging.warning(f"operationId duplicado: el componente '{nombre}' ya existe ({metodo.upper()} {endpoint}).")
+                definiciones[nombre] = construir_respuesta_exito_definicion(descripcion)
+    return definiciones
+
 HEADERS = {
     "Authorization": f"Bearer {TOKEN}",
     "Accept": "application/vnd.github+json",
@@ -555,14 +591,20 @@ def construir_componentes_error(api_type: str) -> dict:
     }
 
 
-def agregar_componentes_error(contenido: str, api_type: str) -> str:
-    """Agrega bajo 'components' las respuestas/ejemplos/schemas estandar de error, para
-    que las operaciones puedan referenciar '500'/'504' contra un contrato comun."""
+def agregar_componentes_respuestas(contenido: str, api_type: str, respuestas_adicionales: dict | None = None) -> str:
+    """Agrega bajo 'components' los schemas y respuestas estandar de error, para que las
+    operaciones puedan referenciar '500'/'504' contra un contrato comun, junto con las
+    respuestas adicionales de cada operacion (ej. 201/202).
+
+    'agregar_o_actualizar_hijo' reemplaza el bloque 'components.responses' completo, por
+    eso ambas fuentes se fusionan antes de escribirlo: escribirlas por separado haria que
+    la segunda borrara a la primera. Las de exito van primero (2xx antes que 4xx/5xx)."""
     componentes_error = construir_componentes_error(api_type)
+    responses = {**(respuestas_adicionales or {}), **componentes_error['responses']}
     contenido = asegurar_clave_raiz(contenido, 'components')
-    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'responses', componentes_error['responses'])
+    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'schemas', componentes_error['schemas'])
+    contenido = agregar_o_actualizar_hijo(contenido, 'components', 'responses', responses)
     # contenido = agregar_o_actualizar_hijo(contenido, 'components', 'examples', componentes_error['examples'])
-    # contenido = agregar_o_actualizar_hijo(contenido, 'components', 'schemas', componentes_error['schemas'])
     return contenido
 
 
@@ -846,16 +888,20 @@ def construir_paths(filas, tag, api_type) -> dict:
         descripcion = texto_o_vacio(fila['Descripcion del Endpoint'])
         if not endpoint or not metodo:
             continue
+        operation_id = construir_operation_id_rest(metodo, endpoint)
         operacion = {
             'tags': [construir_tag_endpoint(endpoint, tag)],
             'summary': descripcion,
             'description': '[DESCRIPCION_ENDPOINT]',
-            'operationId': construir_operation_id_rest(metodo, endpoint),
+            'operationId': operation_id,
         }
         parametros = construir_parametros_header(api_type) + construir_parametros_path(endpoint)
         if parametros:
             operacion['parameters'] = parametros
         operacion['responses'] = {'200': {'description': 'OK'}}
+        for codigo in RESPUESTAS_EXITO_ADICIONALES:
+            nombre = nombre_componente_respuesta(codigo, operation_id)
+            operacion['responses'][codigo] = {'$ref': f'#/components/responses/{nombre}'}
         for codigo, nombre in RESPUESTAS_ERROR_POR_CODIGO.items():
             operacion['responses'][codigo] = {'$ref': f'#/components/responses/{nombre}'}
         paths.setdefault(endpoint, {})[metodo] = operacion
@@ -891,7 +937,7 @@ def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
     nuevo = reemplazar_url_servidor(nuevo, construir_server_url(api_type, owner, tag))
     nuevo = reemplazar_bloque_indentado(nuevo, 'paths', paths)
     nuevo = agregar_parametros_componentes(nuevo, api_type, grupo)
-    nuevo = agregar_componentes_error(nuevo, api_type)
+    nuevo = agregar_componentes_respuestas(nuevo, api_type, recolectar_respuestas_exito(paths))
     return nuevo
 
 
