@@ -1,3 +1,4 @@
+import copy
 import os
 import re
 import sys
@@ -60,6 +61,54 @@ SCHEMAS_HEADER = {
 SCHEMA_POR_HEADER = {
     'Authorization': 'Authorization',
 }
+
+# Propiedades del contrato de error. Se definen en linea dentro de 'ApiException' y
+# 'ApiExceptionDetail' (sin '$ref' a esquemas sueltos); '_propiedades_error' entrega
+# copias para que 'yaml.safe_dump' no escriba anclas/alias al repetirse en ambos.
+PROPIEDADES_ERROR = {
+    'code': {
+        'type': 'string',
+        'description': 'Codigo de error de alto, nivel, es el 2do nivel de detalle de un error, se basa en el http code devuelto.El formato es ERXXXX, donde XXXX es el numero de error.',
+        'maxLength': 6,
+        'example': 'ER0007',
+    },
+    'errorType': {
+        'type': 'string',
+        'enum': ['Functional', 'Technical'],
+        'description': (
+            'Tipo de error:\n'
+            '- Functional - Error devuelto por una validacion o regla de \n'
+            'negocio no superada\n'
+            '- Techical - Error devuelto por la herramienta o sistema,\n'
+            'generalmente causado por problemas tecnicos o dependencias externas.\n'
+        ),
+        'example': 'Functional',
+    },
+    'description': {
+        'type': 'string',
+        'description': 'Descripcion del mensaje de error, alto nivel.',
+        'maxLength': 500,
+        'example': 'Error al llamar al servicio',
+    },
+    'path': {
+        'type': 'string',
+        'maxLength': 200,
+        'description': 'Referencia al path del Json involucrado en el error, aqui se indica que objecto del request, response o parametro de consulta es el involucrado con el error',
+        'example': 'Party.partyIdentification.IdentifierValue',
+    },
+    'url': {
+        'type': 'string',
+        'maxLength': 200,
+        'description': 'Ubicacion de la documentacion para soporte del problema.',
+        'example': 'https://documentation-to-fix-error.com/como-consultar-datos-usuario-info',
+    },
+}
+
+
+def _propiedades_error(*nombres: str) -> dict:
+    """Copia de las propiedades de error pedidas, en ese orden."""
+    return {nombre: copy.deepcopy(PROPIEDADES_ERROR[nombre]) for nombre in nombres}
+
 
 # Componentes de error estandar que se agregan a toda especificacion REST generada,
 # para que cada endpoint pueda referenciar '500'/'504' contra un mismo contrato de error.
@@ -269,47 +318,6 @@ COMPONENTES_ERROR = {
         },
     },
     'schemas': {
-        'Code': {
-            'type': 'string',
-            'title': 'Code',
-            'description': 'Codigo de error de alto, nivel, es el 2do nivel de detalle de un error, se basa en el http code devuelto.El formato es ERXXXX, donde XXXX es el numero de error.',
-            'maxLength': 6,
-            'example': 'ER0007',
-        },
-        'ErrorType': {
-            'type': 'string',
-            'title': 'ErrorType',
-            'enum': ['Functional', 'Technical'],
-            'description': (
-                'Tipo de error:\n'
-                '- Functional - Error devuelto por una validacion o regla de \n'
-                'negocio no superada\n'
-                '- Techical - Error devuelto por la herramienta o sistema,\n'
-                'generalmente causado por problemas tecnicos o dependencias externas.\n'
-            ),
-            'example': 'Functional',
-        },
-        'Description': {
-            'type': 'string',
-            'title': 'Description',
-            'description': 'Descripcion del mensaje de error, alto nivel.',
-            'maxLength': 500,
-            'example': 'Error al llamar al servicio',
-        },
-        'Path': {
-            'type': 'string',
-            'title': 'Path',
-            'maxLength': 200,
-            'description': 'Referencia al path del Json involucrado en el error, aqui se indica que objecto del request, response o parametro de consulta es el involucrado con el error',
-            'example': 'Party.partyIdentification.IdentifierValue',
-        },
-        'Url': {
-            'type': 'string',
-            'title': 'Url',
-            'maxLength': 200,
-            'description': 'Ubicacion de la documentacion para soporte del problema.',
-            'example': 'https://documentation-to-fix-error.com/como-consultar-datos-usuario-info',
-        },
         'ApiExceptionDetail': {
             'type': 'object',
             'title': 'ApiExceptionDetail',
@@ -320,12 +328,7 @@ COMPONENTES_ERROR = {
                 'path': 'Party.partyIdentification.IdentifierValue',
                 'url': 'https://documentacion-to-fix-error.com/como-consultar-datos-usuario-info',
             },
-            'properties': {
-                'code': {'$ref': '#/components/schemas/Code'},
-                'description': {'$ref': '#/components/schemas/Description'},
-                'path': {'$ref': '#/components/schemas/Path'},
-                'url': {'$ref': '#/components/schemas/Url'}
-            },
+            'properties': _propiedades_error('code', 'description', 'path', 'url'),
         },
         'ApiException': {
             'type': 'object',
@@ -345,9 +348,7 @@ COMPONENTES_ERROR = {
                 ],
             },
             'properties': {
-                'code': {'$ref': '#/components/schemas/Code'},
-                'errorType': {'$ref': '#/components/schemas/ErrorType'},
-                'description': {'$ref': '#/components/schemas/Description'},
+                **_propiedades_error('code', 'errorType', 'description'),
                 'exceptionDetails': {
                     'type': 'array',
                     'description': 'Contiene la lista de detalles para mayor detalle del error originado',
@@ -658,8 +659,7 @@ def _solo_code_y_description(valor: dict) -> dict:
 def construir_componentes_error(api_type: str) -> dict:
     """Para 'UX' el contrato de error se reduce a 'code'/'description': se quitan
     'errorType' y el detalle del error tanto del schema 'ApiException' como de los
-    valores de ejemplo, y los schemas que solo servian a esos campos ('ErrorType',
-    'Path', 'Url', 'ApiExceptionDetail') dejan de agregarse por quedar sin uso."""
+    valores de ejemplo, y 'ApiExceptionDetail' deja de agregarse por quedar sin uso."""
     if api_type.strip().upper() != 'UX':
         return COMPONENTES_ERROR
 
@@ -669,17 +669,12 @@ def construir_componentes_error(api_type: str) -> dict:
     }
     api_exception = COMPONENTES_ERROR['schemas']['ApiException']
     schemas = {
-        'Code': COMPONENTES_ERROR['schemas']['Code'],
-        'Description': COMPONENTES_ERROR['schemas']['Description'],
         'ApiException': {
             'type': api_exception['type'],
             'title': api_exception['title'],
             'description': api_exception['description'],
             'example': _solo_code_y_description(api_exception['example']),
-            'properties': {
-                'code': {'$ref': '#/components/schemas/Code'},
-                'description': {'$ref': '#/components/schemas/Description'},
-            },
+            'properties': _propiedades_error('code', 'description'),
         },
     }
     return {
