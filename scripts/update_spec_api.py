@@ -734,22 +734,31 @@ def reemplazar_url_servidor(contenido: str, url: str) -> str:
 
 
 SUFIJO_COMPONENTE_HEADER = 'Header'
+SUFIJO_COMPONENTE_PATH = 'Path'
+SUFIJO_COMPONENTE_QUERY = 'Query'
 
 
-def nombre_componente_header(header: str) -> str:
-    """Clave del header en 'components.parameters': PascalCase + sufijo 'Header'.
-    Las siglas tambien van en PascalCase y se conserva el resto de cada parte, ej.
-    'Request-ID' -> 'RequestIdHeader', 'caller-name' -> 'CallerNameHeader',
-    'callerName' -> 'CallerNameHeader'. El 'name' del parametro conserva el nombre
-    HTTP original, que es lo que envia el cliente."""
-    partes = [p for p in re.split(r'[-_\s]+', header.strip()) if p]
-    nombre = ''.join(
+def pascal_case(nombre: str) -> str:
+    """Divide por '-', '_' y espacios; las siglas tambien van en PascalCase y en el
+    resto de cada parte solo se sube la primera letra, ej. 'Request-ID' -> 'RequestId',
+    'accountId' -> 'AccountId', 'page-size' -> 'PageSize'."""
+    partes = [p for p in re.split(r'[-_\s]+', nombre.strip()) if p]
+    return ''.join(
         p.capitalize() if p.isupper() else p[0].upper() + p[1:]
         for p in partes
     )
-    if not nombre.endswith(SUFIJO_COMPONENTE_HEADER):
-        nombre += SUFIJO_COMPONENTE_HEADER
-    return nombre
+
+
+def con_sufijo(nombre: str, sufijo: str) -> str:
+    return nombre if nombre.endswith(sufijo) else nombre + sufijo
+
+
+def nombre_componente_header(header: str) -> str:
+    """Clave del header en 'components.parameters': PascalCase + sufijo 'Header', ej.
+    'Request-ID' -> 'RequestIdHeader', 'caller-name' -> 'CallerNameHeader',
+    'callerName' -> 'CallerNameHeader'. El 'name' del parametro conserva el nombre
+    HTTP original, que es lo que envia el cliente."""
+    return con_sufijo(pascal_case(header), SUFIJO_COMPONENTE_HEADER)
 
 
 def construir_parametro_header_definicion(header: str) -> dict:
@@ -785,14 +794,48 @@ def extraer_parametros_path(endpoint: str) -> list:
     return re.findall(r'\{([^{}]+)\}', endpoint)
 
 
+def extraer_parametros_query(endpoint: str) -> list:
+    """Nombres de query params del Endpoint del Excel, en orden y sin duplicados. El
+    valor de cada par es solo un ejemplo y se ignora. Ej.
+    '/accounts/{accountId}?id={id}&sort={desc}' -> ['id', 'sort']. Acepta parametros
+    sin valor ('?expand') e ignora pares vacios ('?a=1&&b=2')."""
+    if '?' not in endpoint:
+        return []
+    nombres = []
+    for par in endpoint.split('?', 1)[1].split('&'):
+        nombre = par.split('=', 1)[0].strip().strip('{}').strip()
+        if nombre and nombre not in nombres:
+            nombres.append(nombre)
+    return nombres
+
+
 def nombre_componente_path_param(param: str) -> str:
-    """PascalCase minimo: solo sube la primera letra, preservando el resto del nombre
-    tal como viene en el endpoint (ej. 'accountId' -> 'AccountId')."""
-    return param[0].upper() + param[1:] if param else param
+    """Ej. 'accountId' -> 'AccountIdPath'."""
+    return con_sufijo(pascal_case(param), SUFIJO_COMPONENTE_PATH)
+
+
+def nombre_componente_query_param(param: str) -> str:
+    """Ej. 'page-size' -> 'PageSizeQuery'."""
+    return con_sufijo(pascal_case(param), SUFIJO_COMPONENTE_QUERY)
+
+
+def nombre_schema_parametro(param: str) -> str:
+    """Esquema con el nombre del parametro en PascalCase, ej. 'accountId' -> 'AccountId'.
+    Un mismo nombre usado como path y como query comparte el esquema."""
+    return pascal_case(param)
+
+
+def _ref_schema_parametro(param: str) -> dict:
+    return {'$ref': f'#/components/schemas/{nombre_schema_parametro(param)}'}
 
 
 def construir_parametro_path_definicion(param: str) -> dict:
-    return {'name': param, 'in': 'path', 'required': True, 'schema': {'type': 'string'}}
+    return {'name': param, 'in': 'path', 'required': True, 'schema': _ref_schema_parametro(param)}
+
+
+def construir_parametro_query_definicion(param: str) -> dict:
+    # El Excel no indica obligatoriedad: los query params se documentan como opcionales.
+    return {'name': param, 'in': 'query', 'required': False, 'schema': _ref_schema_parametro(param)}
 
 
 def construir_parametros_path(endpoint: str) -> list:
@@ -802,21 +845,59 @@ def construir_parametros_path(endpoint: str) -> list:
     ]
 
 
+def construir_parametros_query(endpoint_original: str) -> list:
+    return [
+        {'$ref': f'#/components/parameters/{nombre_componente_query_param(param)}'}
+        for param in extraer_parametros_query(endpoint_original)
+    ]
+
+
+def _parametros_de_fila(fila):
+    """(path params, query params) del Endpoint de una fila del Excel."""
+    endpoint_original = texto_o_vacio(fila['Endpoint'])
+    return (extraer_parametros_path(quitar_query_string(endpoint_original)),
+            extraer_parametros_query(endpoint_original))
+
+
 def recolectar_definiciones_parametros(filas, api_type: str) -> dict:
     """Junta en un solo dict las definiciones de todos los parametros referenciados
-    por las operaciones (headers segun 'api_type' + path params de cada endpoint), para
-    escribir 'components.parameters' de una sola vez sin pisar entradas ya agregadas."""
+    por las operaciones (headers segun 'api_type' + path y query params de cada
+    endpoint), para escribir 'components.parameters' de una sola vez. Los sufijos
+    'Header'/'Path'/'Query' evitan que parametros de distinto tipo choquen entre si."""
     headers = HEADERS_REQUERIDOS_POR_TIPO.get(api_type.strip().upper(), [])
     definiciones = {
         nombre_componente_header(header): construir_parametro_header_definicion(header)
         for header in headers
     }
     for _, fila in filas.iterrows():
-        endpoint = quitar_query_string(texto_o_vacio(fila['Endpoint']))
-        for param in extraer_parametros_path(endpoint):
-            clave = nombre_componente_path_param(param)
-            definiciones.setdefault(clave, construir_parametro_path_definicion(param))
+        params_path, params_query = _parametros_de_fila(fila)
+        for param in params_path:
+            definiciones.setdefault(nombre_componente_path_param(param), construir_parametro_path_definicion(param))
+        for param in params_query:
+            definiciones.setdefault(nombre_componente_query_param(param), construir_parametro_query_definicion(param))
     return definiciones
+
+
+def construir_schemas_parametros(filas) -> dict:
+    """Un esquema vacio ({}) por cada nombre de path/query param usado."""
+    schemas = {}
+    for _, fila in filas.iterrows():
+        params_path, params_query = _parametros_de_fila(fila)
+        for param in params_path + params_query:
+            schemas.setdefault(nombre_schema_parametro(param), {})
+    return schemas
+
+
+def fusionar_schemas(*fuentes: dict) -> dict:
+    """Une varias fuentes de 'components.schemas' en orden. Falla si un mismo nombre
+    viene de mas de una fuente, en vez de dejar que una pise a otra en silencio."""
+    fusion = {}
+    for fuente in fuentes:
+        choque = set(fusion) & set(fuente)
+        if choque:
+            raise ValueError(f"Esquemas con nombre repetido entre fuentes distintas: {sorted(choque)}")
+        fusion.update(fuente)
+    return fusion
 
 
 def agregar_parametros_componentes(contenido: str, api_type: str, filas) -> str:
@@ -965,7 +1046,8 @@ def construir_paths(filas, tag, api_type) -> dict:
     un endpoint no tiene un recurso identificable."""
     paths = {}
     for _, fila in filas.iterrows():
-        endpoint = quitar_query_string(texto_o_vacio(fila['Endpoint']))
+        endpoint_original = texto_o_vacio(fila['Endpoint'])
+        endpoint = quitar_query_string(endpoint_original)
         metodo = texto_o_vacio(fila['Metodo']).lower()
         descripcion = texto_o_vacio(fila['Descripcion del Endpoint'])
         if not endpoint or not metodo:
@@ -977,7 +1059,9 @@ def construir_paths(filas, tag, api_type) -> dict:
             'description': '[DESCRIPCION_ENDPOINT]',
             'operationId': operation_id,
         }
-        parametros = construir_parametros_header(api_type) + construir_parametros_path(endpoint)
+        parametros = (construir_parametros_header(api_type)
+                      + construir_parametros_path(endpoint)
+                      + construir_parametros_query(endpoint_original))
         if parametros:
             operacion['parameters'] = parametros
         operacion['responses'] = {'200': {'description': 'OK'}}
@@ -1018,13 +1102,15 @@ def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
     nuevo = reemplazar_bloque_indentado(nuevo, 'paths', paths)
     nuevo = agregar_parametros_componentes(nuevo, api_type, grupo)
     # 'components.schemas' se escribe de una sola vez (reemplaza el bloque completo), asi
-    # que los esquemas de headers se fusionan con los de respuesta antes de escribirlo.
+    # que los esquemas de headers, de path/query params y de respuesta se fusionan antes
+    # de escribirlo. El choque contra los esquemas de error lo valida
+    # 'agregar_componentes_respuestas'.
     adicionales = recolectar_respuestas_exito(paths)
-    schemas_header = construir_schemas_header(api_type)
-    choque = set(schemas_header) & set(adicionales['schemas'])
-    if choque:
-        raise ValueError(f"Esquemas de header que chocan con los de respuesta: {sorted(choque)}")
-    adicionales['schemas'] = {**schemas_header, **adicionales['schemas']}
+    adicionales['schemas'] = fusionar_schemas(
+        construir_schemas_header(api_type),
+        construir_schemas_parametros(grupo),
+        adicionales['schemas'],
+    )
     nuevo = agregar_componentes_respuestas(nuevo, api_type, adicionales)
     # Ultimo paso: las extensiones x-bcp quedan como las ultimas claves raiz del contrato.
     nuevo = escribir_extensiones_al_final(nuevo, {'x-bcp-api-type': api_type, 'x-bcp-api-id': api_id})
