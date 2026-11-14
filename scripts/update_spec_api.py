@@ -42,6 +42,25 @@ HEADERS_REQUERIDOS_POR_TIPO = {
     'PV': HEADERS_PV,
 }
 
+# Esquemas propios de algunos headers: se definen en 'components.schemas' y el
+# parametro del header los referencia por '$ref'. Los headers sin entrada aqui
+# conservan el esquema generico en linea ({type: string}).
+SCHEMAS_HEADER = {
+    'Authorization': {
+        'type': 'string',
+        'description': 'Token de autorizacion JWT',
+        'minLength': 16,
+        'maxLength': 8192,
+        'pattern': r'^Bearer\s.+$',
+        'example': 'Bearer eyJBggffdgdfdf',
+    },
+}
+
+# Header HTTP -> nombre de su esquema en SCHEMAS_HEADER.
+SCHEMA_POR_HEADER = {
+    'Authorization': 'Authorization',
+}
+
 # Componentes de error estandar que se agregan a toda especificacion REST generada,
 # para que cada endpoint pueda referenciar '500'/'504' contra un mismo contrato de error.
 COMPONENTES_ERROR = {
@@ -734,7 +753,18 @@ def nombre_componente_header(header: str) -> str:
 
 
 def construir_parametro_header_definicion(header: str) -> dict:
-    return {'name': header, 'in': 'header', 'required': True, 'schema': {'type': 'string'}}
+    nombre_schema = SCHEMA_POR_HEADER.get(header)
+    schema = {'$ref': f'#/components/schemas/{nombre_schema}'} if nombre_schema else {'type': 'string'}
+    return {'name': header, 'in': 'header', 'required': True, 'schema': schema}
+
+
+def construir_schemas_header(api_type: str) -> dict:
+    """Esquemas de 'components.schemas' para los headers que usa 'api_type' y que
+    tienen esquema propio (ej. 'Authorization'). Si el tipo no usa el header, su
+    esquema no se agrega, para no dejarlo huerfano."""
+    headers = HEADERS_REQUERIDOS_POR_TIPO.get(api_type.strip().upper(), [])
+    nombres = [SCHEMA_POR_HEADER[h] for h in headers if h in SCHEMA_POR_HEADER]
+    return {nombre: SCHEMAS_HEADER[nombre] for nombre in nombres}
 
 
 def construir_parametros_header(api_type: str) -> list:
@@ -987,7 +1017,15 @@ def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
     nuevo = reemplazar_url_servidor(nuevo, construir_server_url(api_type, owner, tag))
     nuevo = reemplazar_bloque_indentado(nuevo, 'paths', paths)
     nuevo = agregar_parametros_componentes(nuevo, api_type, grupo)
-    nuevo = agregar_componentes_respuestas(nuevo, api_type, recolectar_respuestas_exito(paths))
+    # 'components.schemas' se escribe de una sola vez (reemplaza el bloque completo), asi
+    # que los esquemas de headers se fusionan con los de respuesta antes de escribirlo.
+    adicionales = recolectar_respuestas_exito(paths)
+    schemas_header = construir_schemas_header(api_type)
+    choque = set(schemas_header) & set(adicionales['schemas'])
+    if choque:
+        raise ValueError(f"Esquemas de header que chocan con los de respuesta: {sorted(choque)}")
+    adicionales['schemas'] = {**schemas_header, **adicionales['schemas']}
+    nuevo = agregar_componentes_respuestas(nuevo, api_type, adicionales)
     # Ultimo paso: las extensiones x-bcp quedan como las ultimas claves raiz del contrato.
     nuevo = escribir_extensiones_al_final(nuevo, {'x-bcp-api-type': api_type, 'x-bcp-api-id': api_id})
     return nuevo
