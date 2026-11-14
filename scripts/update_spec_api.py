@@ -62,6 +62,25 @@ SCHEMA_POR_HEADER = {
     'Authorization': 'Authorization',
 }
 
+# Esquema de seguridad del contrato y su requisito global. Solo se agregan si el tipo
+# de API exige el header 'Authorization'. 'scheme' debe ser un esquema HTTP registrado
+# en IANA ('bearer'); 'bearerAuth' es solo el nombre del componente.
+NOMBRE_SECURITY_SCHEME = 'bearerAuth'
+SECURITY_SCHEMES = {
+    NOMBRE_SECURITY_SCHEME: {
+        'type': 'http',
+        'description': 'Token de autorizacion',
+        'scheme': 'bearer',
+    },
+}
+SECURITY_GLOBAL = [{NOMBRE_SECURITY_SCHEME: []}]
+
+
+def usa_bearer_auth(api_type: str) -> bool:
+    """El contrato declara seguridad solo si el tipo de API exige el header Authorization."""
+    return 'Authorization' in HEADERS_REQUERIDOS_POR_TIPO.get(api_type.strip().upper(), [])
+
+
 # Propiedades del contrato de error. Se definen en linea dentro de 'ApiException' y
 # 'ApiExceptionDetail' (sin '$ref' a esquemas sueltos); '_propiedades_error' entrega
 # copias para que 'yaml.safe_dump' no escriba anclas/alias al repetirse en ambos.
@@ -639,6 +658,34 @@ def escribir_extensiones_al_final(contenido: str, valores: dict) -> str:
     return '\n'.join(lineas) + '\n'
 
 
+def agregar_security_schemes(contenido: str, api_type: str) -> str:
+    """Escribe 'components.securitySchemes' (lo crea o lo regenera completo) si el tipo
+    de API usa autenticacion bearer."""
+    if not usa_bearer_auth(api_type):
+        return contenido
+    contenido = asegurar_clave_raiz(contenido, 'components')
+    return agregar_o_actualizar_hijo(contenido, 'components', 'securitySchemes', SECURITY_SCHEMES)
+
+
+def escribir_security_al_final(contenido: str, security: list | None) -> str:
+    """Quita el bloque raiz 'security' (si existe) y, si 'security' tiene valor, lo
+    agrega al final del archivo. Debe ir justo antes de 'escribir_extensiones_al_final',
+    que luego mueve las 'x-bcp-*' detras de el (tambien en reruns)."""
+    lineas = contenido.split('\n')
+    bloque = encontrar_bloque(lineas, 'security', indent_esperado=0)
+    if bloque:
+        inicio, fin, _ = bloque
+        lineas = lineas[:inicio] + lineas[fin:]
+    if not security:
+        return '\n'.join(lineas)
+    while lineas and lineas[-1].strip() == '':
+        lineas.pop()
+    fragmento = yaml.safe_dump({'security': security}, sort_keys=False, allow_unicode=True,
+                               default_flow_style=False)
+    lineas += [''] + fragmento.rstrip('\n').split('\n')
+    return '\n'.join(lineas)
+
+
 def asegurar_clave_raiz(contenido: str, clave: str) -> str:
     """Garantiza que 'clave' exista como clave raiz (indent 0), agregandola vacia al
     final del archivo si no esta presente. La plantilla base REST no trae 'components',
@@ -1158,6 +1205,9 @@ def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
     )
     nuevo = agregar_request_bodies(nuevo, cuerpos['requestBodies'])
     nuevo = agregar_componentes_respuestas(nuevo, api_type, adicionales)
+    nuevo = agregar_security_schemes(nuevo, api_type)
+    # 'security' queda al final, justo antes de las extensiones x-bcp.
+    nuevo = escribir_security_al_final(nuevo, SECURITY_GLOBAL if usa_bearer_auth(api_type) else None)
     # Ultimo paso: las extensiones x-bcp quedan como las ultimas claves raiz del contrato.
     nuevo = escribir_extensiones_al_final(nuevo, {'x-bcp-api-type': api_type, 'x-bcp-api-id': api_id})
     return nuevo
