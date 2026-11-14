@@ -562,6 +562,26 @@ def agregar_o_actualizar_hijo(contenido: str, padre: str, clave: str, datos: dic
     return '\n'.join(nuevas)
 
 
+# Extensiones del contrato que se escriben al final del archivo, a nivel raiz, en este orden.
+EXTENSIONES_AL_FINAL = ['x-bcp-api-type', 'x-bcp-api-id']
+
+
+def escribir_extensiones_al_final(contenido: str, valores: dict) -> str:
+    """Quita las lineas 'clave: valor' de cada extension, esten donde esten en la
+    plantilla (raiz o bajo 'info'), y las agrega como claves raiz al final del archivo,
+    en el orden de EXTENSIONES_AL_FINAL. Como primero se quitan y despues se agregan,
+    es idempotente ante reruns. Debe ser el ultimo paso: 'asegurar_clave_raiz' agrega
+    'components' al final del archivo si la plantilla no lo trae."""
+    claves = [clave for clave in EXTENSIONES_AL_FINAL if clave in valores]
+    patron = re.compile(rf"^\s*({'|'.join(re.escape(c) for c in claves)}):(\s.*)?$")
+    lineas = [linea for linea in contenido.split('\n') if not patron.match(linea)]
+    while lineas and lineas[-1].strip() == '':
+        lineas.pop()
+    lineas.append('')
+    lineas += [f'{clave}: {escalar_yaml(str(valores[clave]))}' for clave in claves]
+    return '\n'.join(lineas) + '\n'
+
+
 def asegurar_clave_raiz(contenido: str, clave: str) -> str:
     """Garantiza que 'clave' exista como clave raiz (indent 0), agregandola vacia al
     final del archivo si no esta presente. La plantilla base REST no trae 'components',
@@ -964,12 +984,12 @@ def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
 
     nuevo = reemplazar_info(contenido, api_name, '1.0.0')
     nuevo = reemplazar_tags_rest(nuevo, tags)
-    nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-type', api_type)
-    nuevo = reemplazar_clave_simple(nuevo, 'x-bcp-api-id', api_id)
     nuevo = reemplazar_url_servidor(nuevo, construir_server_url(api_type, owner, tag))
     nuevo = reemplazar_bloque_indentado(nuevo, 'paths', paths)
     nuevo = agregar_parametros_componentes(nuevo, api_type, grupo)
     nuevo = agregar_componentes_respuestas(nuevo, api_type, recolectar_respuestas_exito(paths))
+    # Ultimo paso: las extensiones x-bcp quedan como las ultimas claves raiz del contrato.
+    nuevo = escribir_extensiones_al_final(nuevo, {'x-bcp-api-type': api_type, 'x-bcp-api-id': api_id})
     return nuevo
 
 
