@@ -421,6 +421,43 @@ def recolectar_respuestas_exito(paths: dict) -> dict:
                 schemas[nombre_schema] = {}
     return {'responses': responses, 'schemas': schemas}
 
+
+# Metodos HTTP cuyas operaciones llevan requestBody. Cada una referencia un componente
+# '{OperationId}Request' en 'components.requestBodies', cuyo esquema es un componente
+# homonimo en 'components.schemas', vacio ({}) para completarse al disenar el contrato.
+METODOS_CON_REQUEST_BODY = {'post', 'put', 'patch'}
+SUFIJO_REQUEST_BODY = 'Request'
+
+
+def nombre_request_body(operation_id: str) -> str:
+    """Nombre del requestBody y de su esquema, ej. 'initiateSavingsAccounts' ->
+    'InitiateSavingsAccountsRequest'."""
+    return _pascal(operation_id) + SUFIJO_REQUEST_BODY
+
+
+def construir_request_body_definicion(nombre: str) -> dict:
+    return {
+        'required': True,
+        'content': {'application/json': {'schema': {'$ref': f'#/components/schemas/{nombre}'}}},
+    }
+
+
+def recolectar_request_bodies(paths: dict) -> dict:
+    """{'requestBodies': {...}, 'schemas': {...}} para las operaciones que tienen
+    requestBody. La decision de que operaciones lo llevan se toma solo en
+    'construir_paths'; aqui se lee la presencia de 'requestBody' en la operacion."""
+    request_bodies, schemas = {}, {}
+    for endpoint, operaciones in paths.items():
+        for metodo, operacion in operaciones.items():
+            if 'requestBody' not in operacion:
+                continue
+            nombre = nombre_request_body(operacion['operationId'])
+            if nombre in request_bodies:
+                logging.warning(f"operationId duplicado: el requestBody '{nombre}' ya existe ({metodo.upper()} {endpoint}).")
+            request_bodies[nombre] = construir_request_body_definicion(nombre)
+            schemas[nombre] = {}
+    return {'requestBodies': request_bodies, 'schemas': schemas}
+
 HEADERS = {
     "Authorization": f"Bearer {TOKEN}",
     "Accept": "application/vnd.github+json",
@@ -650,6 +687,15 @@ def construir_componentes_error(api_type: str) -> dict:
         'examples': examples,
         'schemas': schemas,
     }
+
+
+def agregar_request_bodies(contenido: str, request_bodies: dict) -> str:
+    """Escribe 'components.requestBodies' (lo crea o lo regenera completo). Si ninguna
+    operacion lleva requestBody, no agrega la seccion."""
+    if not request_bodies:
+        return contenido
+    contenido = asegurar_clave_raiz(contenido, 'components')
+    return agregar_o_actualizar_hijo(contenido, 'components', 'requestBodies', request_bodies)
 
 
 def agregar_componentes_respuestas(contenido: str, api_type: str, adicionales: dict | None = None) -> str:
@@ -1064,6 +1110,8 @@ def construir_paths(filas, tag, api_type) -> dict:
                       + construir_parametros_query(endpoint_original))
         if parametros:
             operacion['parameters'] = parametros
+        if metodo in METODOS_CON_REQUEST_BODY:
+            operacion['requestBody'] = {'$ref': f'#/components/requestBodies/{nombre_request_body(operation_id)}'}
         operacion['responses'] = {'200': {'description': 'OK'}}
         for codigo in RESPUESTAS_EXITO_ADICIONALES:
             nombre = nombre_componente_respuesta(codigo, operation_id)
@@ -1102,15 +1150,18 @@ def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
     nuevo = reemplazar_bloque_indentado(nuevo, 'paths', paths)
     nuevo = agregar_parametros_componentes(nuevo, api_type, grupo)
     # 'components.schemas' se escribe de una sola vez (reemplaza el bloque completo), asi
-    # que los esquemas de headers, de path/query params y de respuesta se fusionan antes
-    # de escribirlo. El choque contra los esquemas de error lo valida
-    # 'agregar_componentes_respuestas'.
+    # que los esquemas de headers, de path/query params, de request y de respuesta se
+    # fusionan antes de escribirlo (entrada antes que salida). El choque contra los
+    # esquemas de error lo valida 'agregar_componentes_respuestas'.
     adicionales = recolectar_respuestas_exito(paths)
+    cuerpos = recolectar_request_bodies(paths)
     adicionales['schemas'] = fusionar_schemas(
         construir_schemas_header(api_type),
         construir_schemas_parametros(grupo),
+        cuerpos['schemas'],
         adicionales['schemas'],
     )
+    nuevo = agregar_request_bodies(nuevo, cuerpos['requestBodies'])
     nuevo = agregar_componentes_respuestas(nuevo, api_type, adicionales)
     # Ultimo paso: las extensiones x-bcp quedan como las ultimas claves raiz del contrato.
     nuevo = escribir_extensiones_al_final(nuevo, {'x-bcp-api-type': api_type, 'x-bcp-api-id': api_id})
