@@ -658,6 +658,55 @@ def escribir_extensiones_al_final(contenido: str, valores: dict) -> str:
     return '\n'.join(lineas) + '\n'
 
 
+# Orden de las secciones de 'components' en el contrato REST. Las que no esten en la
+# lista van despues, en su orden original.
+ORDEN_COMPONENTES = ['schemas', 'parameters', 'requestBodies', 'responses', 'securitySchemes']
+
+
+def _indent(linea: str) -> int:
+    return len(linea) - len(linea.lstrip(' \t'))
+
+
+def ordenar_secciones_components(contenido: str, orden: list) -> str:
+    """Reordena los bloques hijos directos de 'components' segun 'orden'. Las secciones
+    que no esten en 'orden' van al final, en su orden original; las ausentes se omiten.
+    Los comentarios a nivel de seccion se mueven con la seccion que los sigue, y se
+    quitan las lineas en blanco entre secciones (las del final del bloque se conservan).
+    Un 'schemas:'/'responses:' anidado mas profundo no es seccion: se mueve con la suya."""
+    lineas = contenido.split('\n')
+    bloque = encontrar_bloque(lineas, 'components', indent_esperado=0)
+    if not bloque:
+        return contenido
+    inicio, fin, indent = bloque
+    indent_hijo = indent + 2
+    patron_hijo = re.compile(r'^([^\s#][^:]*):')
+
+    cuerpo_fin = fin
+    while cuerpo_fin > inicio + 1 and lineas[cuerpo_fin - 1].strip() == '':
+        cuerpo_fin -= 1
+
+    secciones, pendientes = [], []
+    for linea in lineas[inicio + 1:cuerpo_fin]:
+        if linea.strip() == '':
+            continue
+        es_hijo_directo = _indent(linea) == indent_hijo
+        m = patron_hijo.match(linea.lstrip(' \t')) if es_hijo_directo else None
+        if m:
+            secciones.append((m.group(1), pendientes + [linea]))
+            pendientes = []
+        elif es_hijo_directo and linea.lstrip().startswith('#'):
+            pendientes.append(linea)
+        elif secciones:
+            secciones[-1][1].append(linea)
+        else:
+            pendientes.append(linea)
+
+    posicion = {nombre: i for i, nombre in enumerate(orden)}
+    ordenadas = sorted(enumerate(secciones), key=lambda par: (posicion.get(par[1][0], len(orden)), par[0]))
+    nuevas = [linea for _, (_, bloque_lineas) in ordenadas for linea in bloque_lineas] + pendientes
+    return '\n'.join(lineas[:inicio + 1] + nuevas + lineas[cuerpo_fin:])
+
+
 def agregar_security_schemes(contenido: str, api_type: str) -> str:
     """Escribe 'components.securitySchemes' (lo crea o lo regenera completo) si el tipo
     de API usa autenticacion bearer."""
@@ -1206,6 +1255,8 @@ def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
     nuevo = agregar_request_bodies(nuevo, cuerpos['requestBodies'])
     nuevo = agregar_componentes_respuestas(nuevo, api_type, adicionales)
     nuevo = agregar_security_schemes(nuevo, api_type)
+    # Con todas las secciones escritas, se fija su orden (tambien si la plantilla las trae).
+    nuevo = ordenar_secciones_components(nuevo, ORDEN_COMPONENTES)
     # 'security' queda al final, justo antes de las extensiones x-bcp.
     nuevo = escribir_security_al_final(nuevo, SECURITY_GLOBAL if usa_bearer_auth(api_type) else None)
     # Ultimo paso: las extensiones x-bcp quedan como las ultimas claves raiz del contrato.
