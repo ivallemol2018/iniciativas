@@ -407,20 +407,8 @@ COMPONENTES_ERROR = {
             },
         },
     },
+    # Orden del contrato: 'ApiException' antes que 'ApiExceptionDetail'.
     'schemas': {
-        'ApiExceptionDetail': {
-            'type': 'object',
-            'title': 'ApiExceptionDetail',
-            'description': 'Contiene la lista de detalles para mayor detalle del error originado',
-            'example': {
-                'code': 'TL0001',
-                'description': 'Error al llamar al servicio',
-                'path': 'Party.partyIdentification.IdentifierValue',
-                'url': 'https://documentacion-to-fix-error.com/como-consultar-datos-usuario-info',
-            },
-            'required': list(CAMPOS_REQUERIDOS_ERROR),
-            'properties': _propiedades_error('code', 'description', 'path', 'url'),
-        },
         'ApiException': {
             'type': 'object',
             'title': 'ApiException',
@@ -447,6 +435,19 @@ COMPONENTES_ERROR = {
                     'items': {'$ref': '#/components/schemas/ApiExceptionDetail'},
                 },
             },
+        },
+        'ApiExceptionDetail': {
+            'type': 'object',
+            'title': 'ApiExceptionDetail',
+            'description': 'Contiene la lista de detalles para mayor detalle del error originado',
+            'example': {
+                'code': 'TL0001',
+                'description': 'Error al llamar al servicio',
+                'path': 'Party.partyIdentification.IdentifierValue',
+                'url': 'https://documentacion-to-fix-error.com/como-consultar-datos-usuario-info',
+            },
+            'required': list(CAMPOS_REQUERIDOS_ERROR),
+            'properties': _propiedades_error('code', 'description', 'path', 'url'),
         },
     },
 }
@@ -829,31 +830,19 @@ def agregar_request_bodies(contenido: str, request_bodies: dict) -> str:
     return agregar_o_actualizar_hijo(contenido, 'components', 'requestBodies', request_bodies)
 
 
-def agregar_componentes_respuestas(contenido: str, adicionales: dict | None = None) -> str:
-    """Agrega bajo 'components' los schemas y respuestas estandar de error (el mismo
-    contrato para todos los tipos de API, BS y UX incluidos), para que las
-    operaciones puedan referenciar '500'/'504' contra un contrato comun, junto con las
-    respuestas y schemas adicionales de cada operacion (ej. 201/202), recibidos como
-    {'responses': {...}, 'schemas': {...}}.
+def agregar_componentes_respuestas(contenido: str, schemas: dict, responses_exito: dict) -> str:
+    """Escribe 'components.schemas' tal como lo recibe (completo y ya ordenado, ver
+    'construir_schemas_contrato', con el contrato de error incluido) y
+    'components.responses': las de exito (201/202) primero y despues las de error, el
+    mismo contrato para todos los tipos de API.
 
-    'agregar_o_actualizar_hijo' reemplaza los bloques 'components.schemas' y
-    'components.responses' completos, por eso ambas fuentes se fusionan antes de
-    escribirlos: escribirlas por separado haria que la segunda borrara a la primera.
-    Las de exito van primero (2xx antes que 4xx/5xx)."""
-    adicionales = adicionales or {}
-    schemas_adicionales = adicionales.get('schemas', {})
-    componentes_error = COMPONENTES_ERROR
-
-    colisiones = set(schemas_adicionales) & set(componentes_error['schemas'])
-    if colisiones:
-        raise ValueError(f"Esquemas de respuesta que chocan con el contrato de error: {sorted(colisiones)}")
-
-    schemas = {**schemas_adicionales, **componentes_error['schemas']}
-    responses = {**adicionales.get('responses', {}), **componentes_error['responses']}
+    'agregar_o_actualizar_hijo' reemplaza cada bloque completo, por eso cada uno se
+    arma entero antes de escribirlo."""
+    responses = {**responses_exito, **COMPONENTES_ERROR['responses']}
     contenido = asegurar_clave_raiz(contenido, 'components')
     contenido = agregar_o_actualizar_hijo(contenido, 'components', 'schemas', schemas)
     contenido = agregar_o_actualizar_hijo(contenido, 'components', 'responses', responses)
-    # contenido = agregar_o_actualizar_hijo(contenido, 'components', 'examples', componentes_error['examples'])
+    # contenido = agregar_o_actualizar_hijo(contenido, 'components', 'examples', COMPONENTES_ERROR['examples'])
     return contenido
 
 
@@ -1069,13 +1058,27 @@ def recolectar_definiciones_parametros(filas, api_type: str) -> dict:
     return definiciones
 
 
-def construir_schemas_parametros(filas) -> dict:
-    """Un esquema vacio ({}) por cada nombre de path/query param usado."""
+def construir_schemas_path_params(filas) -> dict:
+    """Un esquema vacio ({}) por cada nombre de path param, por orden de aparicion."""
     schemas = {}
     for _, fila in filas.iterrows():
-        params_path, params_query = _parametros_de_fila(fila)
-        for param in params_path + params_query:
+        params_path, _ = _parametros_de_fila(fila)
+        for param in params_path:
             schemas.setdefault(nombre_schema_parametro(param), {})
+    return schemas
+
+
+def construir_schemas_query_params(filas, excluir=()) -> dict:
+    """Un esquema vacio ({}) por cada nombre de query param, por orden de aparicion.
+    'excluir': esquemas ya generados como path param (un mismo nombre comparte esquema
+    y queda en el grupo de path)."""
+    schemas = {}
+    for _, fila in filas.iterrows():
+        _, params_query = _parametros_de_fila(fila)
+        for param in params_query:
+            nombre = nombre_schema_parametro(param)
+            if nombre not in excluir:
+                schemas.setdefault(nombre, {})
     return schemas
 
 
@@ -1089,6 +1092,22 @@ def fusionar_schemas(*fuentes: dict) -> dict:
             raise ValueError(f"Esquemas con nombre repetido entre fuentes distintas: {sorted(choque)}")
         fusion.update(fuente)
     return fusion
+
+
+def construir_schemas_contrato(paths: dict, filas, api_type: str) -> dict:
+    """Todos los esquemas de 'components.schemas', en el orden del contrato: Request,
+    Response (201/202), contrato de error (ApiException, ApiExceptionDetail), Headers,
+    Path params y Query params. 'fusionar_schemas' falla si un nombre se repite entre
+    grupos (ej. un query param 'apiException')."""
+    schemas_path = construir_schemas_path_params(filas)
+    return fusionar_schemas(
+        recolectar_request_bodies(paths)['schemas'],
+        recolectar_respuestas_exito(paths)['schemas'],
+        COMPONENTES_ERROR['schemas'],
+        construir_schemas_header(api_type),
+        schemas_path,
+        construir_schemas_query_params(filas, excluir=schemas_path),
+    )
 
 
 def agregar_parametros_componentes(contenido: str, api_type: str, filas) -> str:
@@ -1300,20 +1319,14 @@ def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
     nuevo = reemplazar_url_servidor(nuevo, construir_server_url(api_type, owner, tag))
     nuevo = reemplazar_bloque_indentado(nuevo, 'paths', paths)
     nuevo = agregar_parametros_componentes(nuevo, api_type, grupo)
-    # 'components.schemas' se escribe de una sola vez (reemplaza el bloque completo), asi
-    # que los esquemas de headers, de path/query params, de request y de respuesta se
-    # fusionan antes de escribirlo (entrada antes que salida). El choque contra los
-    # esquemas de error lo valida 'agregar_componentes_respuestas'.
-    adicionales = recolectar_respuestas_exito(paths)
+    # 'components.schemas' se escribe de una sola vez (reemplaza el bloque completo):
+    # 'construir_schemas_contrato' junta todos los grupos en el orden del contrato y
+    # valida que no haya nombres repetidos entre ellos.
     cuerpos = recolectar_request_bodies(paths)
-    adicionales['schemas'] = fusionar_schemas(
-        construir_schemas_header(api_type),
-        construir_schemas_parametros(grupo),
-        cuerpos['schemas'],
-        adicionales['schemas'],
-    )
+    exito = recolectar_respuestas_exito(paths)
+    schemas = construir_schemas_contrato(paths, grupo, api_type)
     nuevo = agregar_request_bodies(nuevo, cuerpos['requestBodies'])
-    nuevo = agregar_componentes_respuestas(nuevo, adicionales)
+    nuevo = agregar_componentes_respuestas(nuevo, schemas, exito['responses'])
     nuevo = agregar_security_schemes(nuevo, api_type)
     # Con todas las secciones escritas, se fija su orden (tambien si la plantilla las trae).
     nuevo = ordenar_secciones_components(nuevo, ORDEN_COMPONENTES)
