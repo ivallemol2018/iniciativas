@@ -65,9 +65,9 @@ HEADERS_REQUERIDOS_POR_TIPO = {
     'PV': HEADERS_PV,
 }
 
-# Esquemas propios de algunos headers: se definen en 'components.schemas' y el
-# parametro del header los referencia por '$ref'. Los headers sin entrada aqui
-# conservan el esquema generico en linea ({type: string}).
+# Esquemas de los headers en 'components.schemas'; cada parametro de header los
+# referencia por '$ref'. Clave: nombre del header en PascalCase ('nombre_schema_header').
+# Un header sin entrada aqui recibe SCHEMA_HEADER_POR_DEFECTO.
 SCHEMAS_HEADER = {
     'Authorization': {
         'type': 'string',
@@ -77,12 +77,14 @@ SCHEMAS_HEADER = {
         'pattern': r'^Bearer\s.+$',
         'example': 'Bearer eyJBggffdgdfdf',
     },
+    'RequestId': {'type': 'string'},
+    'RequestData': {'type': 'string'},
+    'AppCode': {'type': 'string'},
+    'CallerName': {'type': 'string'},
+    'OcpApimSubscriptionKey': {'type': 'string'},
+    'SubscriptionKey': {'type': 'string'},
 }
-
-# Header HTTP -> nombre de su esquema en SCHEMAS_HEADER.
-SCHEMA_POR_HEADER = {
-    'Authorization': 'Authorization',
-}
+SCHEMA_HEADER_POR_DEFECTO = {'type': 'string'}
 
 # Esquema de seguridad del contrato y su requisito global. Solo se agregan si el tipo
 # de API exige el header 'Authorization'. 'scheme' debe ser un esquema HTTP registrado
@@ -895,19 +897,32 @@ def nombre_componente_header(header: str) -> str:
     return con_sufijo(pascal_case(header), SUFIJO_COMPONENTE_HEADER)
 
 
+def nombre_schema_header(header: str) -> str:
+    """Esquema del header en PascalCase, sin sufijo, ej. 'Request-ID' -> 'RequestId',
+    'Authorization' -> 'Authorization'."""
+    return pascal_case(header)
+
+
+def construir_schema_header(header: str) -> dict:
+    """Copia del esquema del header (para que 'yaml.safe_dump' no escriba anclas/alias
+    entre esquemas iguales); {type: string} si no tiene entrada en SCHEMAS_HEADER."""
+    return copy.deepcopy(SCHEMAS_HEADER.get(nombre_schema_header(header), SCHEMA_HEADER_POR_DEFECTO))
+
+
 def construir_parametro_header_definicion(header: str) -> dict:
-    nombre_schema = SCHEMA_POR_HEADER.get(header)
-    schema = {'$ref': f'#/components/schemas/{nombre_schema}'} if nombre_schema else {'type': 'string'}
-    return {'name': header, 'in': 'header', 'required': True, 'schema': schema}
+    return {
+        'name': header,
+        'in': 'header',
+        'required': True,
+        'schema': {'$ref': f'#/components/schemas/{nombre_schema_header(header)}'},
+    }
 
 
 def construir_schemas_header(api_type: str) -> dict:
-    """Esquemas de 'components.schemas' para los headers que usa 'api_type' y que
-    tienen esquema propio (ej. 'Authorization'). Si el tipo no usa el header, su
-    esquema no se agrega, para no dejarlo huerfano."""
+    """Un esquema por cada header que usa 'api_type', en el orden de HEADERS_*. Si el
+    tipo no usa un header, su esquema no se agrega, para no dejarlo huerfano."""
     headers = HEADERS_REQUERIDOS_POR_TIPO.get(api_type.strip().upper(), [])
-    nombres = [SCHEMA_POR_HEADER[h] for h in headers if h in SCHEMA_POR_HEADER]
-    return {nombre: SCHEMAS_HEADER[nombre] for nombre in nombres}
+    return {nombre_schema_header(h): construir_schema_header(h) for h in headers}
 
 
 def construir_parametros_header(api_type: str) -> list:
