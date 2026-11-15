@@ -14,6 +14,28 @@ from repo_naming import parse_api_name, controller_name
 
 logging.basicConfig(level=logging.INFO, format='[LOG] %(message)s')
 
+
+class TextoLiteral(str):
+    """Texto que se escribe en el contrato como bloque literal de YAML ('|')."""
+
+
+class DumperContrato(yaml.SafeDumper):
+    """SafeDumper del script: igual que 'yaml.safe_dump', mas el estilo literal para
+    TextoLiteral. Se usa un dumper propio para no alterar el SafeDumper global."""
+
+
+DumperContrato.add_representer(
+    TextoLiteral,
+    lambda dumper, valor: dumper.represent_scalar('tag:yaml.org,2002:str', valor, style='|'),
+)
+
+
+def volcar_yaml(datos) -> str:
+    """Reemplazo de 'yaml.safe_dump' con las opciones que usa el script."""
+    return yaml.dump(datos, Dumper=DumperContrato, sort_keys=False, allow_unicode=True,
+                     default_flow_style=False)
+
+
 TOKEN = os.getenv('GITHUB_TOKEN')
 ORG = os.getenv('GITHUB_OWNER')
 
@@ -122,6 +144,11 @@ PROPIEDADES_ERROR = {
         'example': 'https://documentation-to-fix-error.com/como-consultar-datos-usuario-info',
     },
 }
+
+
+# Campos obligatorios de 'ApiException' y 'ApiExceptionDetail'. Cada esquema recibe su
+# propia copia de la lista para que 'yaml.safe_dump' no escriba anclas/alias.
+CAMPOS_REQUERIDOS_ERROR = ['code', 'description']
 
 
 def _propiedades_error(*nombres: str) -> dict:
@@ -347,6 +374,7 @@ COMPONENTES_ERROR = {
                 'path': 'Party.partyIdentification.IdentifierValue',
                 'url': 'https://documentacion-to-fix-error.com/como-consultar-datos-usuario-info',
             },
+            'required': list(CAMPOS_REQUERIDOS_ERROR),
             'properties': _propiedades_error('code', 'description', 'path', 'url'),
         },
         'ApiException': {
@@ -366,6 +394,7 @@ COMPONENTES_ERROR = {
                     },
                 ],
             },
+            'required': list(CAMPOS_REQUERIDOS_ERROR),
             'properties': {
                 **_propiedades_error('code', 'errorType', 'description'),
                 'exceptionDetails': {
@@ -625,7 +654,7 @@ def agregar_o_actualizar_hijo(contenido: str, padre: str, clave: str, datos: dic
 
     indent_clave = indent_padre + 2
     prefijo_nietos = ' ' * (indent_clave + 2)
-    fragmento = yaml.safe_dump(datos, sort_keys=False, allow_unicode=True, default_flow_style=False)
+    fragmento = volcar_yaml(datos)
     cuerpo = [prefijo_nietos + linea if linea else linea for linea in fragmento.splitlines()]
     bloque_nuevo = [f"{' ' * indent_clave}{clave}:"] + cuerpo
 
@@ -729,8 +758,7 @@ def escribir_security_al_final(contenido: str, security: list | None) -> str:
         return '\n'.join(lineas)
     while lineas and lineas[-1].strip() == '':
         lineas.pop()
-    fragmento = yaml.safe_dump({'security': security}, sort_keys=False, allow_unicode=True,
-                               default_flow_style=False)
+    fragmento = volcar_yaml({'security': security})
     lineas += [''] + fragmento.rstrip('\n').split('\n')
     return '\n'.join(lineas)
 
@@ -748,38 +776,6 @@ def asegurar_clave_raiz(contenido: str, clave: str) -> str:
     return '\n'.join(lineas)
 
 
-def _solo_code_y_description(valor: dict) -> dict:
-    return {'code': valor['code'], 'description': valor['description']}
-
-
-def construir_componentes_error(api_type: str) -> dict:
-    """Para 'UX' el contrato de error se reduce a 'code'/'description': se quitan
-    'errorType' y el detalle del error tanto del schema 'ApiException' como de los
-    valores de ejemplo, y 'ApiExceptionDetail' deja de agregarse por quedar sin uso."""
-    if api_type.strip().upper() != 'UX':
-        return COMPONENTES_ERROR
-
-    examples = {
-        nombre: {**ejemplo, 'value': _solo_code_y_description(ejemplo['value'])}
-        for nombre, ejemplo in COMPONENTES_ERROR['examples'].items()
-    }
-    api_exception = COMPONENTES_ERROR['schemas']['ApiException']
-    schemas = {
-        'ApiException': {
-            'type': api_exception['type'],
-            'title': api_exception['title'],
-            'description': api_exception['description'],
-            'example': _solo_code_y_description(api_exception['example']),
-            'properties': _propiedades_error('code', 'description'),
-        },
-    }
-    return {
-        'responses': COMPONENTES_ERROR['responses'],
-        'examples': examples,
-        'schemas': schemas,
-    }
-
-
 def agregar_request_bodies(contenido: str, request_bodies: dict) -> str:
     """Escribe 'components.requestBodies' (lo crea o lo regenera completo). Si ninguna
     operacion lleva requestBody, no agrega la seccion."""
@@ -789,8 +785,9 @@ def agregar_request_bodies(contenido: str, request_bodies: dict) -> str:
     return agregar_o_actualizar_hijo(contenido, 'components', 'requestBodies', request_bodies)
 
 
-def agregar_componentes_respuestas(contenido: str, api_type: str, adicionales: dict | None = None) -> str:
-    """Agrega bajo 'components' los schemas y respuestas estandar de error, para que las
+def agregar_componentes_respuestas(contenido: str, adicionales: dict | None = None) -> str:
+    """Agrega bajo 'components' los schemas y respuestas estandar de error (el mismo
+    contrato para todos los tipos de API, BS y UX incluidos), para que las
     operaciones puedan referenciar '500'/'504' contra un contrato comun, junto con las
     respuestas y schemas adicionales de cada operacion (ej. 201/202), recibidos como
     {'responses': {...}, 'schemas': {...}}.
@@ -801,7 +798,7 @@ def agregar_componentes_respuestas(contenido: str, api_type: str, adicionales: d
     Las de exito van primero (2xx antes que 4xx/5xx)."""
     adicionales = adicionales or {}
     schemas_adicionales = adicionales.get('schemas', {})
-    componentes_error = construir_componentes_error(api_type)
+    componentes_error = COMPONENTES_ERROR
 
     colisiones = set(schemas_adicionales) & set(componentes_error['schemas'])
     if colisiones:
@@ -833,7 +830,7 @@ def reemplazar_bloque_indentado(contenido: str, clave: str, datos, vacio: str = 
     inicio, fin, indent = encontrado
     prefijo_hijo = ' ' * (indent + 2)
     if datos:
-        fragmento = yaml.safe_dump(datos, sort_keys=False, allow_unicode=True, default_flow_style=False)
+        fragmento = volcar_yaml(datos)
         cuerpo = [prefijo_hijo + linea if linea else linea for linea in fragmento.splitlines()]
     else:
         cuerpo = [prefijo_hijo + vacio]
@@ -1178,6 +1175,12 @@ def recolectar_tags(paths: dict) -> list:
     return tags
 
 
+# Descripcion funcional de cada operacion REST: se completa a mano en el contrato. Se
+# escribe como bloque literal ('description: |'); el '\n' final hace que PyYAML use '|'
+# en lugar de '|-'.
+DESCRIPCION_ENDPOINT = TextoLiteral('[INGRESAR_AQUI_DESCRIPCION_FUNCIONAL_DETALLADA_ENDPOINT]\n')
+
+
 def construir_paths(filas, tag, api_type) -> dict:
     """'tag' es el tag derivado del nombre de la API; solo se usa como respaldo cuando
     un endpoint no tiene un recurso identificable."""
@@ -1193,7 +1196,7 @@ def construir_paths(filas, tag, api_type) -> dict:
         operacion = {
             'tags': [construir_tag_endpoint(endpoint, tag)],
             'summary': descripcion,
-            'description': '[DESCRIPCION_ENDPOINT]',
+            'description': DESCRIPCION_ENDPOINT,
             'operationId': operation_id,
         }
         parametros = (construir_parametros_header(api_type)
@@ -1253,7 +1256,7 @@ def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
         adicionales['schemas'],
     )
     nuevo = agregar_request_bodies(nuevo, cuerpos['requestBodies'])
-    nuevo = agregar_componentes_respuestas(nuevo, api_type, adicionales)
+    nuevo = agregar_componentes_respuestas(nuevo, adicionales)
     nuevo = agregar_security_schemes(nuevo, api_type)
     # Con todas las secciones escritas, se fija su orden (tambien si la plantilla las trae).
     nuevo = ordenar_secciones_components(nuevo, ORDEN_COMPONENTES)
