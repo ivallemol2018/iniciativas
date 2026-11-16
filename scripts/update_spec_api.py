@@ -881,6 +881,43 @@ def escribir_security_al_final(contenido: str, security: list | None) -> str:
     return '\n'.join(lineas)
 
 
+# Documentacion externa del contrato: el README dentro del repo generado.
+URL_EXTERNAL_DOCS = '../doc/Readme.md'
+
+
+def escribir_external_docs(contenido: str, url: str) -> str:
+    """Fija 'externalDocs.url' (clave raiz). Si el bloque existe, cambia solo el valor
+    de 'url' (o lo agrega si falta) y conserva el resto, como 'description', y su
+    posicion. Si no existe, lo crea al final del archivo; 'escribir_security_al_final'
+    y 'escribir_extensiones_al_final' se ejecutan despues y quedan por debajo.
+    Solo se toca el 'externalDocs' raiz, no los anidados en tags u operaciones."""
+    url_esc = escalar_yaml(url)
+    lineas = contenido.split('\n')
+    bloque = encontrar_bloque(lineas, 'externalDocs', indent_esperado=0)
+    if not bloque:
+        while lineas and lineas[-1].strip() == '':
+            lineas.pop()
+        lineas += ['externalDocs:', f'  url: {url_esc}']
+        return '\n'.join(lineas)
+    inicio, fin, indent = bloque
+    # Si el bloque quedo al final (seguido solo de 'security'/'x-bcp-*', que se
+    # reescriben despues), se quitan sus lineas en blanco finales: esos pasos agregan
+    # la suya y, sin esto, cada rerun sumaria una linea en blanco mas.
+    resto = [linea for linea in lineas[fin:] if linea.strip()]
+    if not resto or resto[0].startswith(('security:', 'x-bcp-')):
+        while fin > inicio + 1 and lineas[fin - 1].strip() == '':
+            del lineas[fin - 1]
+            fin -= 1
+    prefijo_hijo = ' ' * (indent + 2)
+    patron = re.compile(rf'^{prefijo_hijo}url:(\s.*)?$')
+    for i in range(inicio + 1, fin):
+        if patron.match(lineas[i]):
+            lineas[i] = f'{prefijo_hijo}url: {url_esc}'
+            return '\n'.join(lineas)
+    lineas.insert(inicio + 1, f'{prefijo_hijo}url: {url_esc}')
+    return '\n'.join(lineas)
+
+
 def asegurar_clave_raiz(contenido: str, clave: str) -> str:
     """Garantiza que 'clave' exista como clave raiz (indent 0), agregandola vacia al
     final del archivo si no esta presente. La plantilla base REST no trae 'components',
@@ -1355,7 +1392,6 @@ def construir_paths(filas, tag, api_type) -> dict:
             operacion['parameters'] = parametros
         if metodo in METODOS_CON_REQUEST_BODY:
             operacion['requestBody'] = {'$ref': f'#/components/requestBodies/{nombre_request_body(operation_id)}'}
-        operacion['responses'] = {'200': {'description': 'OK'}}
         for codigo in RESPUESTAS_EXITO_ADICIONALES:
             nombre = nombre_componente_respuesta(codigo, operation_id)
             operacion['responses'][codigo] = {'$ref': f'#/components/responses/{nombre}'}
@@ -1403,6 +1439,9 @@ def procesar_rest(contenido: str, api_name: str, tag: str, grupo) -> str:
     nuevo = agregar_security_schemes(nuevo, api_type)
     # Con todas las secciones escritas, se fija su orden (tambien si la plantilla las trae).
     nuevo = ordenar_secciones_components(nuevo, ORDEN_COMPONENTES)
+    # 'externalDocs.url' apunta al README del repo; si la plantilla no trae el bloque,
+    # se crea antes de 'security' y de las extensiones x-bcp.
+    nuevo = escribir_external_docs(nuevo, URL_EXTERNAL_DOCS)
     # 'security' queda al final, justo antes de las extensiones x-bcp.
     nuevo = escribir_security_al_final(nuevo, SECURITY_GLOBAL if usa_bearer_auth(api_type) else None)
     # Ultimo paso: las extensiones x-bcp quedan como las ultimas claves raiz del contrato.
