@@ -538,14 +538,33 @@ RESPUESTAS_ERROR_POR_CODIGO = {
     '504': '504GatewayTimeoutResponse',
 }
 
-# Respuestas de exito adicionales de cada operacion. Cada operacion referencia un
-# componente propio '{codigo}{OperationId}Response' en 'components.responses', cuyo
-# esquema es a su vez un componente '{OperationId}{sufijo_schema}' en
-# 'components.schemas', vacio ({}) para completarse al disenar el contrato.
-RESPUESTAS_EXITO_ADICIONALES = {
+# Respuestas de exito. Cada operacion referencia un componente propio
+# '{codigo}{OperationId}Response' en 'components.responses'. Si el codigo lleva cuerpo,
+# su esquema es un componente '{OperationId}{sufijo_schema}' en 'components.schemas',
+# vacio ({}) para completarse al disenar el contrato. 'sufijo_schema' None = respuesta
+# sin cuerpo (204).
+RESPUESTAS_EXITO = {
+    '200': {'description': 'OK', 'sufijo_schema': 'Response'},
     '201': {'description': 'Created', 'sufijo_schema': 'CreatedResponse'},
     '202': {'description': 'Accepted', 'sufijo_schema': 'AcceptedResponse'},
+    '204': {'description': 'No Content', 'sufijo_schema': None},
 }
+
+# Codigos de exito de cada metodo HTTP, en el orden en que se escriben.
+RESPUESTAS_EXITO_POR_METODO = {
+    'get': ['200'],
+    'post': ['201', '202'],
+    'put': ['200'],
+    'patch': ['200'],
+    'delete': ['204'],
+}
+CODIGOS_EXITO_POR_DEFECTO = ['200']
+
+
+def codigos_exito(metodo: str) -> list:
+    """Codigos de exito que declara una operacion segun su metodo HTTP; '200' para
+    los metodos sin regla (HEAD, OPTIONS, ...)."""
+    return list(RESPUESTAS_EXITO_POR_METODO.get(metodo.strip().lower(), CODIGOS_EXITO_POR_DEFECTO))
 
 
 def _pascal(operation_id: str) -> str:
@@ -558,12 +577,18 @@ def nombre_componente_respuesta(codigo: str, operation_id: str) -> str:
     return f'{codigo}{_pascal(operation_id)}Response'
 
 
-def nombre_schema_respuesta(codigo: str, operation_id: str) -> str:
-    """Ej. ('201', 'initiateSavingsAccounts') -> 'InitiateSavingsAccountsCreatedResponse'."""
-    return _pascal(operation_id) + RESPUESTAS_EXITO_ADICIONALES[codigo]['sufijo_schema']
+def nombre_schema_respuesta(codigo: str, operation_id: str) -> str | None:
+    """Ej. ('201', 'initiateSavingsAccounts') -> 'InitiateSavingsAccountsCreatedResponse',
+    ('200', 'retrieveSavingsAccounts') -> 'RetrieveSavingsAccountsResponse'.
+    None si el codigo no lleva cuerpo (204)."""
+    sufijo = RESPUESTAS_EXITO[codigo]['sufijo_schema']
+    return None if sufijo is None else _pascal(operation_id) + sufijo
 
 
-def construir_respuesta_exito_definicion(descripcion: str, nombre_schema: str) -> dict:
+def construir_respuesta_exito_definicion(descripcion: str, nombre_schema: str | None) -> dict:
+    """Sin 'nombre_schema' (204) la respuesta no lleva 'content'."""
+    if nombre_schema is None:
+        return {'description': descripcion}
     return {
         'description': descripcion,
         'content': {'application/json': {'schema': {'$ref': f'#/components/schemas/{nombre_schema}'}}},
@@ -571,21 +596,22 @@ def construir_respuesta_exito_definicion(descripcion: str, nombre_schema: str) -
 
 
 def recolectar_respuestas_exito(paths: dict) -> dict:
-    """Componentes de las respuestas 201/202 de cada operacion, como
-    {'responses': {...}, 'schemas': {...}}. Se arman en un solo recorrido de 'paths' a
-    partir de los operationId ya generados, para que los nombres de respuesta, esquema
-    y '$ref' coincidan siempre."""
+    """Componentes de las respuestas de exito de cada operacion (segun su metodo, ver
+    'codigos_exito'), como {'responses': {...}, 'schemas': {...}}. Se arman en un solo
+    recorrido de 'paths' a partir de los operationId ya generados, para que los nombres
+    de respuesta, esquema y '$ref' coincidan siempre."""
     responses, schemas = {}, {}
     for endpoint, operaciones in paths.items():
         for metodo, operacion in operaciones.items():
             operation_id = operacion['operationId']
-            for codigo, config in RESPUESTAS_EXITO_ADICIONALES.items():
+            for codigo in codigos_exito(metodo):
                 nombre = nombre_componente_respuesta(codigo, operation_id)
                 nombre_schema = nombre_schema_respuesta(codigo, operation_id)
                 if nombre in responses:
                     logging.warning(f"operationId duplicado: el componente '{nombre}' ya existe ({metodo.upper()} {endpoint}).")
-                responses[nombre] = construir_respuesta_exito_definicion(config['description'], nombre_schema)
-                schemas[nombre_schema] = {}
+                responses[nombre] = construir_respuesta_exito_definicion(RESPUESTAS_EXITO[codigo]['description'], nombre_schema)
+                if nombre_schema is not None:
+                    schemas[nombre_schema] = {}
     return {'responses': responses, 'schemas': schemas}
 
 
@@ -943,7 +969,7 @@ def agregar_request_bodies(contenido: str, request_bodies: dict) -> str:
 def agregar_componentes_respuestas(contenido: str, schemas: dict, responses_exito: dict) -> str:
     """Escribe 'components.schemas' tal como lo recibe (completo y ya ordenado, ver
     'construir_schemas_contrato', con el contrato de error incluido) y
-    'components.responses': las de exito (201/202) primero y despues las de error, el
+    'components.responses': las de exito (segun el metodo) primero y despues las de error, el
     mismo contrato para todos los tipos de API.
 
     'agregar_o_actualizar_hijo' reemplaza cada bloque completo, por eso cada uno se
@@ -1206,7 +1232,7 @@ def fusionar_schemas(*fuentes: dict) -> dict:
 
 def construir_schemas_contrato(paths: dict, filas, api_type: str) -> dict:
     """Todos los esquemas de 'components.schemas', en el orden del contrato: Request,
-    Response (201/202), contrato de error (ApiException, ApiExceptionDetail), Headers,
+    Response (exito segun el metodo), contrato de error (ApiException, ApiExceptionDetail), Headers,
     Path params y Query params. 'fusionar_schemas' falla si un nombre se repite entre
     grupos (ej. un query param 'apiException')."""
     schemas_path = construir_schemas_path_params(filas)
@@ -1392,7 +1418,9 @@ def construir_paths(filas, tag, api_type) -> dict:
             operacion['parameters'] = parametros
         if metodo in METODOS_CON_REQUEST_BODY:
             operacion['requestBody'] = {'$ref': f'#/components/requestBodies/{nombre_request_body(operation_id)}'}
-        for codigo in RESPUESTAS_EXITO_ADICIONALES:
+        # Crea 'responses' (no borrar: los bucles siguientes agregan sobre este dict).
+        operacion['responses'] = {}
+        for codigo in codigos_exito(metodo):
             nombre = nombre_componente_respuesta(codigo, operation_id)
             operacion['responses'][codigo] = {'$ref': f'#/components/responses/{nombre}'}
         for codigo, nombre in RESPUESTAS_ERROR_POR_CODIGO.items():
