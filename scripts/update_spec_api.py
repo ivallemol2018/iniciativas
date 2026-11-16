@@ -195,9 +195,28 @@ PROPIEDADES_ERROR = {
 CAMPOS_REQUERIDOS_ERROR = ['code', 'description']
 
 
-def _propiedades_error(*nombres: str) -> dict:
-    """Copia de las propiedades de error pedidas, en ese orden."""
-    return {nombre: copy.deepcopy(PROPIEDADES_ERROR[nombre]) for nombre in nombres}
+# Contrato de error de las APIs PV: propiedades en PascalCase. Se reutilizan las
+# definiciones del contrato comun para no duplicar textos ni validaciones.
+PROPIEDADES_ERROR_PV = {
+    'Code': PROPIEDADES_ERROR['code'],
+    'Id': {
+        'type': 'string',
+        'description': 'Identificador unico de la ocurrencia del error, para trazabilidad.',
+        'example': '6f1c2a3b-0d4e-4f5a-9b8c-7d6e5f4a3b2c',
+    },
+    'Message': PROPIEDADES_ERROR['description'],
+    'ErrorCode': PROPIEDADES_ERROR['code'],
+    'Path': PROPIEDADES_ERROR['path'],
+    'Url': PROPIEDADES_ERROR['url'],
+}
+
+
+def _propiedades_error(*nombres: str, origen: dict | None = None) -> dict:
+    """Copia de las propiedades de error pedidas, en ese orden. 'origen' por defecto es
+    PROPIEDADES_ERROR; la copia evita anclas/alias de 'yaml.safe_dump' cuando dos
+    propiedades salen de la misma definicion (ej. 'Code' y 'ErrorCode' en PV)."""
+    origen = PROPIEDADES_ERROR if origen is None else origen
+    return {nombre: copy.deepcopy(origen[nombre]) for nombre in nombres}
 
 
 # Componentes de error estandar que se agregan a toda especificacion REST generada,
@@ -451,6 +470,60 @@ COMPONENTES_ERROR = {
         },
     },
 }
+
+# Esquemas del contrato de error para APIs PV (PascalCase, sin 'errorType'). Mismos
+# nombres de componente y mismo orden que el contrato comun, asi que las respuestas de
+# error y los nombres reservados no cambian.
+SCHEMAS_ERROR_PV = {
+    'ApiException': {
+        'type': 'object',
+        'title': 'ApiException',
+        'description': COMPONENTES_ERROR['schemas']['ApiException']['description'],
+        'example': {
+            'Code': 'ER0007',
+            'Id': '6f1c2a3b-0d4e-4f5a-9b8c-7d6e5f4a3b2c',
+            'Message': 'Error al llamar al servicio',
+            'Errors': [
+                {
+                    'ErrorCode': 'TL001',
+                    'Message': 'Error al llamar al servicio',
+                    'Path': 'Party.partyIdentification.IdentifierValue',
+                    'Url': 'https://documentation-to-fix-error.com/como-consultar-datos-usuario-info',
+                },
+            ],
+        },
+        'required': ['Code', 'Message', 'Errors'],
+        'properties': {
+            **_propiedades_error('Code', 'Id', 'Message', origen=PROPIEDADES_ERROR_PV),
+            'Errors': {
+                'type': 'array',
+                'description': 'Contiene la lista de detalles para mayor detalle del error originado',
+                'items': {'$ref': '#/components/schemas/ApiExceptionDetail'},
+            },
+        },
+    },
+    'ApiExceptionDetail': {
+        'type': 'object',
+        'title': 'ApiExceptionDetail',
+        'description': COMPONENTES_ERROR['schemas']['ApiExceptionDetail']['description'],
+        'example': {
+            'ErrorCode': 'TL0001',
+            'Message': 'Error al llamar al servicio',
+            'Path': 'Party.partyIdentification.IdentifierValue',
+            'Url': 'https://documentacion-to-fix-error.com/como-consultar-datos-usuario-info',
+        },
+        'required': ['ErrorCode', 'Message'],
+        'properties': _propiedades_error('ErrorCode', 'Message', 'Path', 'Url', origen=PROPIEDADES_ERROR_PV),
+    },
+}
+
+
+def schemas_error(api_type: str) -> dict:
+    """Esquemas del contrato de error: PV tiene su propia estructura (PascalCase); el
+    resto de los tipos usa la comun."""
+    if api_type.strip().upper() == 'PV':
+        return SCHEMAS_ERROR_PV
+    return COMPONENTES_ERROR['schemas']
 
 # Codigo HTTP -> nombre del 'components.responses' que toda operacion REST referencia.
 RESPUESTAS_ERROR_POR_CODIGO = {
@@ -1103,7 +1176,7 @@ def construir_schemas_contrato(paths: dict, filas, api_type: str) -> dict:
     return fusionar_schemas(
         recolectar_request_bodies(paths)['schemas'],
         recolectar_respuestas_exito(paths)['schemas'],
-        COMPONENTES_ERROR['schemas'],
+        schemas_error(api_type),
         construir_schemas_header(api_type),
         schemas_path,
         construir_schemas_query_params(filas, excluir=schemas_path),
