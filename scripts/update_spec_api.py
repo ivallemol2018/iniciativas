@@ -1766,11 +1766,30 @@ def _textos_multilinea_literales(nodo):
     return nodo
 
 
+def asegurar_servers_raiz(contrato: dict) -> dict:
+    """Prepara el 'servers' raiz para 'reemplazar_url_servidor', que cambia la primera
+    linea '- url:' de todo el texto: si falta o no es valido se crea con una URL vacia;
+    se ubica justo despues de 'openapi'/'info' (antes de 'paths', cuyos 'servers' por
+    path u operacion no deben tocarse); y se quitan las 'variables' del primer servidor,
+    que la URL nueva no usa. Los demas servidores y la 'description' se conservan.
+    Devuelve un dict nuevo con las claves en ese orden."""
+    servers = contrato.get('servers')
+    if not isinstance(servers, list) or not servers or not isinstance(servers[0], dict):
+        servers = [{'url': ''}]
+    primero = {k: v for k, v in servers[0].items() if k != 'variables'}
+    primero.setdefault('url', '')
+    servers = [primero] + list(servers[1:])
+    cabecera = {k: contrato[k] for k in ('openapi', 'info') if k in contrato}
+    resto = {k: v for k, v in contrato.items() if k not in cabecera and k != 'servers'}
+    return {**cabecera, 'servers': servers, **resto}
+
+
 def procesar_service_domain(texto_contrato: str, api_name: str, tag: str, grupo) -> str:
     """Contrato de una API BS a partir del contrato de su Service Domain: solo las
     operaciones del Excel, sin componentes ni tags huerfanos, con 'info.title' = nombre
-    de la API y las extensiones x-bcp al final (igual que 'procesar_rest'). Lanza
-    ValueError si el contrato no es un OpenAPI valido o si no queda ninguna operacion."""
+    de la API, la URL del servidor y las extensiones x-bcp al final calculadas igual que
+    en 'procesar_rest'. Lanza ValueError si el contrato no es un OpenAPI valido o si no
+    queda ninguna operacion."""
     try:
         contrato = yaml.safe_load(texto_contrato)
     except yaml.YAMLError as error:
@@ -1794,14 +1813,18 @@ def procesar_service_domain(texto_contrato: str, api_name: str, tag: str, grupo)
     podar_componentes(contrato)
 
     api_type = str(grupo.iloc[0]['Tipo']).strip()
+    owner = str(grupo.iloc[0]['Owner']).strip()
     info = contrato.setdefault('info', {})
     if isinstance(info, dict):
         info['title'] = api_name
     contrato = {k: v for k, v in contrato.items() if k not in EXTENSIONES_AL_FINAL}
     if isinstance(contrato.get('info'), dict):
         contrato['info'] = {k: v for k, v in contrato['info'].items() if k not in EXTENSIONES_AL_FINAL}
+    contrato = asegurar_servers_raiz(contrato)
 
     nuevo = volcar_yaml(_textos_multilinea_literales(contrato))
+    # Misma URL de servidor que 'procesar_rest' (ej. '/business-{tag}/v1' para BS).
+    nuevo = reemplazar_url_servidor(nuevo, construir_server_url(api_type, owner, tag))
     return escribir_extensiones_al_final(nuevo, {'x-bcp-api-type': api_type, 'x-bcp-api-id': slug(tag)})
 
 
