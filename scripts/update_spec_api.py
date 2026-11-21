@@ -46,6 +46,20 @@ SPEC_TARGET_TEMPLATE = 'api/{repo}.yaml'
 RAMAS_DESTINO = ['main', 'design']
 REQUIRED_COLUMNS = ['API', 'Estilo', 'Tipo', 'Owner', 'Metodo', 'Endpoint', 'Descripcion del Endpoint']
 
+# Contratos de Service Domain (APIs BS). El listado de Service Domains vive junto al
+# script; el repositorio con los contratos y sus subcarpetas de plantillas BIAN se
+# configuran por variables de entorno. Sin SERVICE_DOMAIN_REPO o sin SERVICE_DOMAIN_PATHS
+# la deteccion queda desactivada y todas las APIs usan la plantilla.
+RUTA_SERVICE_DOMAINS = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'service_domains.yaml')
+SERVICE_DOMAIN_REPO = os.getenv('SERVICE_DOMAIN_REPO', '').strip() or 'api-semantic-mapping'
+SERVICE_DOMAIN_OWNER = os.getenv('SERVICE_DOMAIN_OWNER', '').strip() or ORG
+SERVICE_DOMAIN_REF = os.getenv('SERVICE_DOMAIN_REF', '').strip() or 'main'
+# Subcarpetas del repositorio de contratos con las plantillas BIAN, separadas por coma
+# (ej. 'templates/bian'). Nunca se busca en la raiz del repositorio.
+SERVICE_DOMAIN_PATHS = os.getenv('SERVICE_DOMAIN_PATHS', '').strip() or 'openApi'
+EXTENSIONES_CONTRATO = ('.yaml', '.yml')
+METODOS_HTTP = {'get', 'put', 'post', 'delete', 'patch', 'head', 'options', 'trace'}
+
 METODO_A_OPERACION_ASYNC = {
     'send': 'publish',
     'publish': 'publish',
@@ -1552,6 +1566,279 @@ def procesar_event_driven(contenido: str, api_name: str, tag: str, grupo) -> str
     return nuevo
 
 
+# --- Service Domain (APIs BS) ---------------------------------------------
+
+def cargar_service_domains(ruta: str = RUTA_SERVICE_DOMAINS) -> list:
+    """Nombres de Service Domain del listado ('service-domains'), sin vacios ni
+    duplicados. Lista vacia si el archivo no existe."""
+    if not os.path.exists(ruta):
+        logging.warning(f"No existe el listado de Service Domains '{ruta}'.")
+        return []
+    with open(ruta, encoding='utf-8') as f:
+        datos = yaml.safe_load(f) or {}
+    nombres = []
+    for valor in datos.get('service-domains') or []:
+        nombre = ' '.join(str(valor).split())
+        if nombre and nombre not in nombres:
+            nombres.append(nombre)
+    return nombres
+
+
+def identificar_service_domain(api_name: str, api_type: str, service_domains: list) -> str | None:
+    """Service Domain al que pertenece una API BS: aquel cuyas palabras son las primeras
+    del nombre despues de 'API BS' (sin la version final, como en 'parse_api_name'),
+    sin distinguir mayusculas. Con varias coincidencias gana la mas larga. Ej.
+    'API BS Customer offer Cards V1' -> 'Customer Offer';
+    'API BS Test Savings Account V1' -> None."""
+    if api_type.strip().upper() != 'BS':
+        return None
+    partes = str(api_name).split()
+    if len(partes) < 3 or partes[0] != 'API' or partes[1].upper() != 'BS':
+        return None
+    palabras = [p.lower() for p in partes[2:-1]]
+    elegido, largo = None, 0
+    for sd in service_domains:
+        palabras_sd = sd.lower().split()
+        if palabras_sd and palabras[:len(palabras_sd)] == palabras_sd and len(palabras_sd) > largo:
+            elegido, largo = sd, len(palabras_sd)
+    return elegido
+
+
+def kebab_case(texto: str) -> str:
+    """Nombre del Service Domain en el formato de los nombres de archivo: minusculas y
+    palabras separadas por '-'. Ej. 'Customer Offer' -> 'customer-offer'."""
+    return '-'.join(p for p in re.split(r'[\s_-]+', texto.strip().lower()) if p)
+
+
+def _contiene_segmentos(nombre: str, clave: str) -> bool:
+    """'clave' aparece en 'nombre' como segmentos kebab-case completos (delimitada por
+    '-' o por el inicio/fin). Ej. 'customer-offer' esta en 'api-template-customer-offer'
+    pero no en 'api-template-customer-offers'."""
+    return f'-{clave}-' in f'-{nombre}-'
+
+
+def buscar_contrato_service_domain(sd: str, archivos: list, service_domains: list = ()) -> str | None:
+    """Ruta del contrato del Service Domain: un '.yaml'/'.yml' cuyo nombre (sin
+    extension) contiene el nombre del Service Domain en kebab-case como segmentos
+    completos, ej. 'api-template-customer-offer.yaml' para 'Customer Offer'. Los
+    nombres que no estan en kebab-case ('CustomerOffer', 'customer_offer') no se
+    reconocen. Prioriza la coincidencia exacta; si no la hay, acepta una unica
+    coincidencia parcial. Descarta los archivos que contienen un Service Domain mas
+    largo del listado (ej. 'api-template-customer-offer.yaml' no es del Service Domain
+    'Customer'). None si no hay contrato o es ambiguo."""
+    clave = kebab_case(sd)
+    if not clave:
+        return None
+    mas_largos = [c for c in (kebab_case(o) for o in service_domains)
+                  if c != clave and _contiene_segmentos(c, clave)]
+    exactos, parciales = [], []
+    for ruta in archivos:
+        base = ruta.rsplit('/', 1)[-1]
+        nombre, ext = os.path.splitext(base)
+        if ext.lower() not in EXTENSIONES_CONTRATO:
+            continue
+        if nombre == clave:
+            exactos.append(ruta)
+        elif _contiene_segmentos(nombre, clave) and not any(_contiene_segmentos(nombre, c) for c in mas_largos):
+            parciales.append(ruta)
+    candidatos = exactos or parciales
+    if len(candidatos) == 1:
+        return candidatos[0]
+    if not candidatos:
+        logging.warning(f"No se encontro el contrato del Service Domain '{sd}'.")
+    else:
+        logging.warning(f"Contrato del Service Domain '{sd}' ambiguo: {candidatos}.")
+    return None
+
+
+def normalizar_endpoint(endpoint: str) -> str:
+    """Forma comparable de un path: sin query string, sin '/' final, en minusculas y con
+    cada path param como '{}'. Ej. '/Accounts/{accountId}/?x=1' -> '/accounts/{}'."""
+    path = quitar_query_string(endpoint).rstrip('/') or '/'
+    return re.sub(r'\{[^{}]*\}', '{}', path.lower())
+
+
+def endpoints_excel(filas) -> set:
+    """Pares (path normalizado, metodo en minusculas) de las filas del Excel."""
+    endpoints = set()
+    for _, fila in filas.iterrows():
+        endpoint = texto_o_vacio(fila['Endpoint'])
+        metodo = texto_o_vacio(fila['Metodo']).lower()
+        if endpoint and metodo:
+            endpoints.add((normalizar_endpoint(endpoint), metodo))
+    return endpoints
+
+
+def filtrar_paths_contrato(paths: dict, endpoints: set) -> dict:
+    """Conserva solo las operaciones cuyo (path, metodo) esta en 'endpoints'. Las claves
+    del path que no son metodos ('parameters', 'summary', ...) se mantienen si queda
+    algun metodo; un path sin metodos se elimina."""
+    filtrados = {}
+    for path, item in (paths or {}).items():
+        if not isinstance(item, dict):
+            continue
+        clave = normalizar_endpoint(str(path))
+        nuevo = {k: v for k, v in item.items()
+                 if str(k).lower() not in METODOS_HTTP or (clave, str(k).lower()) in endpoints}
+        if any(str(k).lower() in METODOS_HTTP for k in nuevo):
+            filtrados[path] = nuevo
+    return filtrados
+
+
+PATRON_REF_COMPONENTE = re.compile(r'^#/components/([^/]+)/([^/]+)$')
+
+
+def _decodificar_puntero(segmento: str) -> str:
+    """Segmento de JSON Pointer: '~1' -> '/', '~0' -> '~'."""
+    return segmento.replace('~1', '/').replace('~0', '~')
+
+
+def _refs_componentes(nodo, encontrados: set):
+    """Agrega a 'encontrados' cada (seccion, nombre) referenciado como
+    '#/components/<seccion>/<nombre>': en '$ref' y en 'discriminator.mapping'."""
+    if isinstance(nodo, dict):
+        for valor in nodo.values():
+            _refs_componentes(valor, encontrados)
+    elif isinstance(nodo, list):
+        for valor in nodo:
+            _refs_componentes(valor, encontrados)
+    elif isinstance(nodo, str):
+        m = PATRON_REF_COMPONENTE.match(nodo)
+        if m:
+            encontrados.add((_decodificar_puntero(m.group(1)), _decodificar_puntero(m.group(2))))
+
+
+def podar_componentes(contrato: dict) -> dict:
+    """Quita de 'components' lo que ya no se referencia desde el resto del contrato,
+    siguiendo las referencias transitivas entre componentes. 'securitySchemes' se
+    conserva: se referencia por nombre en 'security', no por '$ref'."""
+    componentes = contrato.get('components')
+    if not isinstance(componentes, dict):
+        return contrato
+    usados = set()
+    _refs_componentes({k: v for k, v in contrato.items() if k != 'components'}, usados)
+    pendientes = list(usados)
+    while pendientes:
+        seccion, nombre = pendientes.pop()
+        definicion = (componentes.get(seccion) or {}).get(nombre) if isinstance(componentes.get(seccion), dict) else None
+        nuevos = set()
+        _refs_componentes(definicion, nuevos)
+        for ref in nuevos - usados:
+            usados.add(ref)
+            pendientes.append(ref)
+    for seccion in list(componentes):
+        if seccion == 'securitySchemes' or not isinstance(componentes[seccion], dict):
+            continue
+        componentes[seccion] = {n: d for n, d in componentes[seccion].items() if (seccion, n) in usados}
+        if not componentes[seccion]:
+            del componentes[seccion]
+    if not componentes:
+        del contrato['components']
+    return contrato
+
+
+def podar_tags(contrato: dict) -> dict:
+    """Deja en 'tags' (raiz) solo los usados por alguna operacion."""
+    if not isinstance(contrato.get('tags'), list):
+        return contrato
+    usados = {
+        tag
+        for item in (contrato.get('paths') or {}).values() if isinstance(item, dict)
+        for metodo, operacion in item.items() if str(metodo).lower() in METODOS_HTTP and isinstance(operacion, dict)
+        for tag in operacion.get('tags') or []
+    }
+    contrato['tags'] = [t for t in contrato['tags'] if isinstance(t, dict) and t.get('name') in usados]
+    if not contrato['tags']:
+        del contrato['tags']
+    return contrato
+
+
+def _textos_multilinea_literales(nodo):
+    """Copia de 'nodo' con los textos de varias lineas como TextoLiteral, para que se
+    escriban como bloque '|' en vez de una cadena entre comillas con '\\n'. PyYAML usa
+    otro estilo por su cuenta si el texto no se puede escribir como bloque."""
+    if isinstance(nodo, dict):
+        return {k: _textos_multilinea_literales(v) for k, v in nodo.items()}
+    if isinstance(nodo, list):
+        return [_textos_multilinea_literales(v) for v in nodo]
+    if isinstance(nodo, str) and '\n' in nodo.strip('\n'):
+        return TextoLiteral(nodo)
+    return nodo
+
+
+def procesar_service_domain(texto_contrato: str, api_name: str, tag: str, grupo) -> str:
+    """Contrato de una API BS a partir del contrato de su Service Domain: solo las
+    operaciones del Excel, sin componentes ni tags huerfanos, con 'info.title' = nombre
+    de la API y las extensiones x-bcp al final (igual que 'procesar_rest'). Lanza
+    ValueError si el contrato no es un OpenAPI valido o si no queda ninguna operacion."""
+    try:
+        contrato = yaml.safe_load(texto_contrato)
+    except yaml.YAMLError as error:
+        raise ValueError(f"el contrato del Service Domain no es YAML valido: {error}") from error
+    if not isinstance(contrato, dict) or not isinstance(contrato.get('paths'), dict):
+        raise ValueError("el contrato del Service Domain no tiene 'paths'.")
+
+    endpoints = endpoints_excel(grupo)
+    contrato['paths'] = filtrar_paths_contrato(contrato['paths'], endpoints)
+    if not contrato['paths']:
+        raise ValueError("ningun endpoint del Excel existe en el contrato del Service Domain.")
+    presentes = {
+        (normalizar_endpoint(str(path)), str(metodo).lower())
+        for path, item in contrato['paths'].items()
+        for metodo in item if str(metodo).lower() in METODOS_HTTP
+    }
+    for path, metodo in sorted(endpoints - presentes):
+        logging.warning(f"El endpoint {metodo.upper()} {path} del Excel no existe en el contrato del Service Domain.")
+
+    podar_tags(contrato)
+    podar_componentes(contrato)
+
+    api_type = str(grupo.iloc[0]['Tipo']).strip()
+    info = contrato.setdefault('info', {})
+    if isinstance(info, dict):
+        info['title'] = api_name
+    contrato = {k: v for k, v in contrato.items() if k not in EXTENSIONES_AL_FINAL}
+    if isinstance(contrato.get('info'), dict):
+        contrato['info'] = {k: v for k, v in contrato['info'].items() if k not in EXTENSIONES_AL_FINAL}
+
+    nuevo = volcar_yaml(_textos_multilinea_literales(contrato))
+    return escribir_extensiones_al_final(nuevo, {'x-bcp-api-type': api_type, 'x-bcp-api-id': slug(tag)})
+
+
+def carpetas_service_domain(valor: str) -> list:
+    """Subcarpetas de SERVICE_DOMAIN_PATHS (separadas por coma), sin espacios ni '/' al
+    inicio/fin y sin duplicados. Las rutas vacias o a la raiz ('', '/', '.') se descartan
+    con un warning: las plantillas BIAN nunca se buscan en la raiz del repositorio."""
+    carpetas = []
+    for parte in (valor or '').split(','):
+        carpeta = parte.strip().strip('/').strip()
+        if carpeta in ('', '.'):
+            if parte.strip():
+                logging.warning(f"Subcarpeta '{parte.strip()}' de SERVICE_DOMAIN_PATHS descartada: apunta a la raiz del repositorio.")
+            continue
+        if carpeta not in carpetas:
+            carpetas.append(carpeta)
+    return carpetas
+
+
+def obtener_contrato_service_domain(sd: str, service_domains: list, cache: dict) -> str | None:
+    """Texto del contrato del Service Domain, buscado solo en las subcarpetas de
+    plantillas BIAN ('cache["carpetas"]'). La lista de archivos y cada contrato se
+    descargan una sola vez ('cache')."""
+    if sd in cache['contratos']:
+        return cache['contratos'][sd]
+    if cache['archivos'] is None:
+        cache['archivos'] = listar_archivos_repo(SERVICE_DOMAIN_OWNER, SERVICE_DOMAIN_REPO, SERVICE_DOMAIN_REF,
+                                                 cache['carpetas'])
+    texto = None
+    ruta = buscar_contrato_service_domain(sd, cache['archivos'], service_domains)
+    if ruta:
+        logging.info(f"Contrato del Service Domain '{sd}': {SERVICE_DOMAIN_REPO}/{ruta}.")
+        texto, _ = obtener_archivo(SERVICE_DOMAIN_REPO, ruta, SERVICE_DOMAIN_REF, owner=SERVICE_DOMAIN_OWNER)
+    cache['contratos'][sd] = texto
+    return texto
+
+
 # --- GitHub Contents API --------------------------------------------------
 
 def rama_existe(repo, rama):
@@ -1564,8 +1851,34 @@ def rama_existe(repo, rama):
     return False
 
 
-def obtener_archivo(repo, path, rama):
-    url = f"https://api.github.com/repos/{ORG}/{repo}/contents/{path}"
+def listar_archivos_repo(owner, repo, ref, carpetas) -> list:
+    """Rutas (desde la raiz del repo) de los archivos ('blob') dentro de cada subcarpeta
+    de 'carpetas' y de sus subcarpetas internas, en 'ref'. Solo se lista el arbol de esas
+    subcarpetas ('{ref}:{carpeta}'), nunca la raiz. Una subcarpeta inexistente o que no
+    se pudo leer se omite con un aviso."""
+    archivos = []
+    for carpeta in carpetas:
+        url = f"https://api.github.com/repos/{owner}/{repo}/git/trees/{ref}:{carpeta}"
+        response = requests.get(url, headers=HEADERS, params={'recursive': '1'})
+        if response.status_code == 404:
+            logging.warning(f"La subcarpeta '{carpeta}' no existe en '{owner}/{repo}' (ref '{ref}').")
+            continue
+        if response.status_code != 200:
+            logging.error(f"No se pudo listar '{carpeta}' en '{owner}/{repo}' (ref '{ref}'): {response.status_code} - {response.text}")
+            continue
+        data = response.json()
+        if data.get('truncated'):
+            logging.warning(f"El arbol de '{carpeta}' en '{owner}/{repo}' viene truncado; puede faltar algun contrato.")
+        for item in data.get('tree', []):
+            ruta = f"{carpeta}/{item['path']}"
+            if item.get('type') == 'blob' and ruta not in archivos:
+                archivos.append(ruta)
+    return archivos
+
+
+def obtener_archivo(repo, path, rama, owner=None):
+    owner = owner or ORG
+    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
     for intento in range(3):
         response = requests.get(url, headers=HEADERS, params={'ref': rama})
         if response.status_code == 200:
@@ -1581,7 +1894,15 @@ def obtener_archivo(repo, path, rama):
                     time.sleep(5)
                     continue
                 return None, None
-            contenido = base64.b64decode(data['content']).decode('utf-8')
+            if not data.get('content') and data.get('download_url'):
+                # Archivos de mas de 1 MB: la Contents API no trae el contenido en base64.
+                crudo = requests.get(data['download_url'], headers=HEADERS)
+                if crudo.status_code != 200:
+                    logging.error(f"No se pudo descargar '{path}' en '{repo}' (rama '{rama}'): {crudo.status_code}")
+                    return None, None
+                contenido = crudo.content.decode('utf-8')
+            else:
+                contenido = base64.b64decode(data['content']).decode('utf-8')
             contenido = contenido.replace('\r\n', '\n').replace('\r', '\n')
             return contenido, data['sha']
         if response.status_code == 404 and intento < 2:
@@ -1635,6 +1956,14 @@ def main():
 
     df = cargar_excel()
 
+    carpetas_sd = carpetas_service_domain(SERVICE_DOMAIN_PATHS)
+    if not SERVICE_DOMAIN_REPO:
+        logging.info("SERVICE_DOMAIN_REPO no definido: las APIs BS usan la plantilla.")
+    elif not carpetas_sd:
+        logging.info("SERVICE_DOMAIN_PATHS sin subcarpetas validas: las APIs BS usan la plantilla.")
+    service_domains = cargar_service_domains() if SERVICE_DOMAIN_REPO and carpetas_sd else []
+    cache_service_domains = {'archivos': None, 'contratos': {}, 'carpetas': carpetas_sd}
+
     for api_name, grupo in df.groupby('API', sort=False):
         api_type = str(grupo.iloc[0]['Tipo']).strip()
         logging.info(f"Api type {api_type}")
@@ -1651,6 +1980,16 @@ def main():
         destino = SPEC_TARGET_TEMPLATE.format(repo=repo)
         estilo = str(grupo.iloc[0]['Estilo']).strip().lower()
 
+        # APIs BS de un Service Domain: el contrato sale del contrato del Service Domain
+        # (se descarga una vez por API, no por rama); el resto usa la plantilla.
+        contrato_sd = None
+        service_domain = identificar_service_domain(str(api_name).strip(), api_type, service_domains)
+        if service_domain and estilo == 'rest':
+            logging.info(f"La API '{api_name}' pertenece al Service Domain '{service_domain}'.")
+            contrato_sd = obtener_contrato_service_domain(service_domain, service_domains, cache_service_domains)
+            if contrato_sd is None:
+                logging.warning(f"Sin contrato del Service Domain '{service_domain}': se usa la plantilla para '{repo}'.")
+
         for rama in RAMAS_DESTINO:
             if rama != 'main' and not rama_existe(repo, rama):
                 logging.info(f"La rama '{rama}' no existe en '{repo}'. Se omite.")
@@ -1661,7 +2000,14 @@ def main():
                 continue
 
             try:
-                if estilo == 'rest':
+                if estilo == 'rest' and contrato_sd is not None:
+                    try:
+                        nuevo_contenido = procesar_service_domain(contrato_sd, str(api_name).strip(), tag, grupo)
+                    except ValueError as error:
+                        logging.warning(f"No se pudo usar el contrato del Service Domain '{service_domain}' para '{repo}' "
+                                        f"(rama '{rama}'): {error} Se usa la plantilla.")
+                        nuevo_contenido = procesar_rest(contenido, str(api_name).strip(), tag, grupo)
+                elif estilo == 'rest':
                     nuevo_contenido = procesar_rest(contenido, str(api_name).strip(), tag, grupo)
                 elif estilo == 'event-driven':
                     continue
