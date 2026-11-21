@@ -1,0 +1,8 @@
+# Service Domains reconocidos para las APIs BS (ver docs/plan_service_domain_bs.md).
+# Una API BS pertenece a un Service Domain si las primeras palabras de su nombre, despues
+# de 'API BS', son las del Service Domain (sin distinguir mayusculas). Ej.
+# 'API BS Customer Offer Cards V1' -> 'Customer Offer'.
+# Completar con el listado oficial de Service Domains.
+service-domains:
+- Customer Offer
+- Savings Account
