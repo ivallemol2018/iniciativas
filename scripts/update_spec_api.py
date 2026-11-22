@@ -57,6 +57,10 @@ SERVICE_DOMAIN_REF = os.getenv('SERVICE_DOMAIN_REF', '').strip() or 'main'
 # Subcarpetas del repositorio de contratos con las plantillas BIAN, separadas por coma
 # (ej. 'templates/bian'). Nunca se busca en la raiz del repositorio.
 SERVICE_DOMAIN_PATHS = os.getenv('SERVICE_DOMAIN_PATHS', '').strip() or 'openApi'
+# Comparacion del path del Excel con el de la plantilla BIAN cuando tiene path params:
+# 'identica' (por defecto, mismo nombre de path param) o 'comodin' (cualquier {param}
+# coincide). Se valida en 'leer_modo_path_param' -> MODO_PATH_PARAM.
+SERVICE_DOMAIN_PATH_PARAM_MODE = os.getenv('SERVICE_DOMAIN_PATH_PARAM_MODE', '')
 EXTENSIONES_CONTRATO = ('.yaml', '.yml')
 METODOS_HTTP = {'get', 'put', 'post', 'delete', 'patch', 'head', 'options', 'trace'}
 
@@ -1651,33 +1655,59 @@ def buscar_contrato_service_domain(sd: str, archivos: list, service_domains: lis
     return None
 
 
-def normalizar_endpoint(endpoint: str) -> str:
-    """Forma comparable de un path: sin query string, sin '/' final, en minusculas y con
-    cada path param como '{}'. Ej. '/Accounts/{accountId}/?x=1' -> '/accounts/{}'."""
+MODO_PATH_PARAM_IDENTICA = 'identica'
+MODO_PATH_PARAM_COMODIN = 'comodin'
+MODOS_PATH_PARAM = (MODO_PATH_PARAM_IDENTICA, MODO_PATH_PARAM_COMODIN)
+
+
+def leer_modo_path_param(valor) -> str:
+    """Modo de comparacion de path params de SERVICE_DOMAIN_PATH_PARAM_MODE, sin
+    distinguir mayusculas ni espacios. Vacio -> 'identica'; un valor invalido tambien,
+    con un warning."""
+    modo = str(valor or '').strip().lower()
+    if not modo:
+        return MODO_PATH_PARAM_IDENTICA
+    if modo not in MODOS_PATH_PARAM:
+        logging.warning(f"SERVICE_DOMAIN_PATH_PARAM_MODE '{valor}' no es valido (se esperaba "
+                        f"{' o '.join(MODOS_PATH_PARAM)}); se usa '{MODO_PATH_PARAM_IDENTICA}'.")
+        return MODO_PATH_PARAM_IDENTICA
+    return modo
+
+
+MODO_PATH_PARAM = leer_modo_path_param(SERVICE_DOMAIN_PATH_PARAM_MODE)
+
+
+def normalizar_endpoint(endpoint: str, modo: str = MODO_PATH_PARAM_IDENTICA) -> str:
+    """Forma comparable de un path. En ambos modos se quitan la query string y la '/'
+    final. 'identica': el resto queda literal, ej. '/Accounts/{accountId}/?x=1' ->
+    '/Accounts/{accountId}'. 'comodin': ademas minusculas y cada path param como '{}',
+    ej. '/Accounts/{accountId}/?x=1' -> '/accounts/{}'."""
     path = quitar_query_string(endpoint).rstrip('/') or '/'
-    return re.sub(r'\{[^{}]*\}', '{}', path.lower())
+    if modo == MODO_PATH_PARAM_COMODIN:
+        return re.sub(r'\{[^{}]*\}', '{}', path.lower())
+    return path
 
 
-def endpoints_excel(filas) -> set:
-    """Pares (path normalizado, metodo en minusculas) de las filas del Excel."""
+def endpoints_excel(filas, modo: str = MODO_PATH_PARAM_IDENTICA) -> set:
+    """Pares (path normalizado segun 'modo', metodo en minusculas) de las filas del Excel."""
     endpoints = set()
     for _, fila in filas.iterrows():
         endpoint = texto_o_vacio(fila['Endpoint'])
         metodo = texto_o_vacio(fila['Metodo']).lower()
         if endpoint and metodo:
-            endpoints.add((normalizar_endpoint(endpoint), metodo))
+            endpoints.add((normalizar_endpoint(endpoint, modo), metodo))
     return endpoints
 
 
-def filtrar_paths_contrato(paths: dict, endpoints: set) -> dict:
-    """Conserva solo las operaciones cuyo (path, metodo) esta en 'endpoints'. Las claves
-    del path que no son metodos ('parameters', 'summary', ...) se mantienen si queda
-    algun metodo; un path sin metodos se elimina."""
+def filtrar_paths_contrato(paths: dict, endpoints: set, modo: str = MODO_PATH_PARAM_IDENTICA) -> dict:
+    """Conserva solo las operaciones cuyo (path, metodo), normalizado segun 'modo', esta
+    en 'endpoints'. Las claves del path que no son metodos ('parameters', 'summary', ...)
+    se mantienen si queda algun metodo; un path sin metodos se elimina."""
     filtrados = {}
     for path, item in (paths or {}).items():
         if not isinstance(item, dict):
             continue
-        clave = normalizar_endpoint(str(path))
+        clave = normalizar_endpoint(str(path), modo)
         nuevo = {k: v for k, v in item.items()
                  if str(k).lower() not in METODOS_HTTP or (clave, str(k).lower()) in endpoints}
         if any(str(k).lower() in METODOS_HTTP for k in nuevo):
@@ -1784,12 +1814,38 @@ def asegurar_servers_raiz(contrato: dict) -> dict:
     return {**cabecera, 'servers': servers, **resto}
 
 
-def procesar_service_domain(texto_contrato: str, api_name: str, tag: str, grupo) -> str:
+def _operaciones_contrato(paths: dict, modo: str) -> dict:
+    """{(path normalizado segun 'modo', metodo): path original} de las operaciones."""
+    return {
+        (normalizar_endpoint(str(path), modo), str(metodo).lower()): str(path)
+        for path, item in (paths or {}).items() if isinstance(item, dict)
+        for metodo in item if str(metodo).lower() in METODOS_HTTP
+    }
+
+
+def _avisar_endpoints_faltantes(faltantes: set, paths_originales: dict, modo: str):
+    """Warning por cada endpoint del Excel que no esta en el contrato. En modo
+    'identica', si el endpoint coincidiria con comodin, indica el path del contrato
+    para revisar el nombre del path param."""
+    con_comodin = _operaciones_contrato(paths_originales, MODO_PATH_PARAM_COMODIN) if modo == MODO_PATH_PARAM_IDENTICA else {}
+    for path, metodo in sorted(faltantes):
+        similar = con_comodin.get((normalizar_endpoint(path, MODO_PATH_PARAM_COMODIN), metodo))
+        if similar:
+            logging.warning(f"El endpoint {metodo.upper()} {path} del Excel no coincide de forma identica; el contrato "
+                            f"del Service Domain tiene {metodo.upper()} {similar} (revise el nombre del path param).")
+        else:
+            logging.warning(f"El endpoint {metodo.upper()} {path} del Excel no existe en el contrato del Service Domain.")
+
+
+def procesar_service_domain(texto_contrato: str, api_name: str, tag: str, grupo,
+                            modo_path_param: str | None = None) -> str:
     """Contrato de una API BS a partir del contrato de su Service Domain: solo las
     operaciones del Excel, sin componentes ni tags huerfanos, con 'info.title' = nombre
     de la API, la URL del servidor y las extensiones x-bcp al final calculadas igual que
-    en 'procesar_rest'. Lanza ValueError si el contrato no es un OpenAPI valido o si no
-    queda ninguna operacion."""
+    en 'procesar_rest'. Los paths se comparan segun 'modo_path_param' ('identica' o
+    'comodin'; por defecto MODO_PATH_PARAM). Lanza ValueError si el contrato no es un
+    OpenAPI valido o si no queda ninguna operacion."""
+    modo = modo_path_param or MODO_PATH_PARAM
     try:
         contrato = yaml.safe_load(texto_contrato)
     except yaml.YAMLError as error:
@@ -1797,17 +1853,13 @@ def procesar_service_domain(texto_contrato: str, api_name: str, tag: str, grupo)
     if not isinstance(contrato, dict) or not isinstance(contrato.get('paths'), dict):
         raise ValueError("el contrato del Service Domain no tiene 'paths'.")
 
-    endpoints = endpoints_excel(grupo)
-    contrato['paths'] = filtrar_paths_contrato(contrato['paths'], endpoints)
+    endpoints = endpoints_excel(grupo, modo)
+    paths_originales = contrato['paths']
+    contrato['paths'] = filtrar_paths_contrato(paths_originales, endpoints, modo)
+    presentes = set(_operaciones_contrato(contrato['paths'], modo))
+    _avisar_endpoints_faltantes(endpoints - presentes, paths_originales, modo)
     if not contrato['paths']:
-        raise ValueError("ningun endpoint del Excel existe en el contrato del Service Domain.")
-    presentes = {
-        (normalizar_endpoint(str(path)), str(metodo).lower())
-        for path, item in contrato['paths'].items()
-        for metodo in item if str(metodo).lower() in METODOS_HTTP
-    }
-    for path, metodo in sorted(endpoints - presentes):
-        logging.warning(f"El endpoint {metodo.upper()} {path} del Excel no existe en el contrato del Service Domain.")
+        raise ValueError(f"ningun endpoint del Excel existe en el contrato del Service Domain (comparacion '{modo}').")
 
     podar_tags(contrato)
     podar_componentes(contrato)
@@ -1985,6 +2037,8 @@ def main():
     elif not carpetas_sd:
         logging.info("SERVICE_DOMAIN_PATHS sin subcarpetas validas: las APIs BS usan la plantilla.")
     service_domains = cargar_service_domains() if SERVICE_DOMAIN_REPO and carpetas_sd else []
+    if service_domains:
+        logging.info(f"Comparacion de path params con las plantillas BIAN: '{MODO_PATH_PARAM}'.")
     cache_service_domains = {'archivos': None, 'contratos': {}, 'carpetas': carpetas_sd}
 
     for api_name, grupo in df.groupby('API', sort=False):
