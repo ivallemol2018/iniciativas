@@ -53,7 +53,7 @@ jobs:
         
      - name: Instalar dependencias Python
        run: |
-         pip install pandas openpyxl requests
+         pip install pandas openpyxl requests pyyaml
 
      - name: Validar Excel
        id: validate_excel
@@ -66,6 +66,24 @@ jobs:
          GITHUB_REPO: ${{ github.event.repository.name }}
          PR_NUMBER: ${{ github.event.pull_request.number }}
          WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+     - name: Validar endpoints BIAN
+       id: validate_bian_endpoints
+       if: ${{ steps.validate_excel.outcome == 'success' }}
+       continue-on-error: true
+       run: |
+          python3 scripts/validate_bian_endpoints.py --file "$FILE_PATH"
+       env:
+         GITHUB_TOKEN: ${{ env.ACCESS_TOKEN }}
+         GITHUB_OWNER: ${{ github.repository_owner }}
+         GITHUB_REPO: ${{ github.event.repository.name }}
+         PR_NUMBER: ${{ github.event.pull_request.number }}
+         WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+         SERVICE_DOMAIN_REPO: ${{ vars.SERVICE_DOMAIN_REPO }}
+         SERVICE_DOMAIN_OWNER: ${{ vars.SERVICE_DOMAIN_OWNER }}
+         SERVICE_DOMAIN_REF: ${{ vars.SERVICE_DOMAIN_REF }}
+         SERVICE_DOMAIN_PATHS: ${{ vars.SERVICE_DOMAIN_PATHS }}
+         SERVICE_DOMAIN_PATH_PARAM_MODE: ${{ vars.SERVICE_DOMAIN_PATH_PARAM_MODE }}
 
   create_repo:
     name: Crear Repositorio de APIs

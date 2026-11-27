@@ -1833,13 +1833,58 @@ def _operaciones_contrato(paths: dict, modo: str) -> dict:
     }
 
 
+def _buscador_path_similar(paths: dict, modo: str):
+    """Funcion (path, metodo) -> path del contrato que coincidiria con comodin, o None.
+    Solo busca en modo 'identica': en 'comodin' ya se comparo de esa forma."""
+    if modo != MODO_PATH_PARAM_IDENTICA:
+        return lambda path, metodo: None
+    con_comodin = _operaciones_contrato(paths, MODO_PATH_PARAM_COMODIN)
+    return lambda path, metodo: con_comodin.get((normalizar_endpoint(path, MODO_PATH_PARAM_COMODIN), metodo))
+
+
+def cargar_contrato_service_domain(texto_contrato: str) -> dict:
+    """Contrato del Service Domain como dict. Lanza ValueError si no es YAML valido o no
+    tiene 'paths'."""
+    try:
+        contrato = yaml.safe_load(texto_contrato)
+    except yaml.YAMLError as error:
+        raise ValueError(f"el contrato del Service Domain no es YAML valido: {error}") from error
+    if not isinstance(contrato, dict) or not isinstance(contrato.get('paths'), dict):
+        raise ValueError("el contrato del Service Domain no tiene 'paths'.")
+    return contrato
+
+
+def endpoints_faltantes_en_contrato(texto_contrato: str, filas, modo: str | None = None) -> list:
+    """Filas del Excel cuyo endpoint (metodo + path) no esta en la plantilla BIAN, en el
+    orden del Excel: [{'indice', 'metodo', 'endpoint', 'similar'}]. 'indice' es el
+    indice de la fila en el DataFrame; 'similar' es el path del contrato que coincidiria
+    con comodin (solo en modo 'identica') o None. Compara igual que
+    'procesar_service_domain' (mismo 'modo', por defecto MODO_PATH_PARAM). Lanza
+    ValueError si el contrato no es un OpenAPI valido."""
+    modo = modo or MODO_PATH_PARAM
+    paths = cargar_contrato_service_domain(texto_contrato)['paths']
+    operaciones = _operaciones_contrato(paths, modo)
+    similar = _buscador_path_similar(paths, modo)
+    faltantes = []
+    for indice, fila in filas.iterrows():
+        endpoint = texto_o_vacio(fila['Endpoint'])
+        metodo = texto_o_vacio(fila['Metodo']).lower()
+        if not endpoint or not metodo:
+            continue
+        path = normalizar_endpoint(endpoint, modo)
+        if (path, metodo) not in operaciones:
+            faltantes.append({'indice': indice, 'metodo': metodo, 'endpoint': quitar_query_string(endpoint),
+                              'similar': similar(path, metodo)})
+    return faltantes
+
+
 def _avisar_endpoints_faltantes(faltantes: set, paths_originales: dict, modo: str):
     """Warning por cada endpoint del Excel que no esta en el contrato. En modo
     'identica', si el endpoint coincidiria con comodin, indica el path del contrato
     para revisar el nombre del path param."""
-    con_comodin = _operaciones_contrato(paths_originales, MODO_PATH_PARAM_COMODIN) if modo == MODO_PATH_PARAM_IDENTICA else {}
+    buscar_similar = _buscador_path_similar(paths_originales, modo)
     for path, metodo in sorted(faltantes):
-        similar = con_comodin.get((normalizar_endpoint(path, MODO_PATH_PARAM_COMODIN), metodo))
+        similar = buscar_similar(path, metodo)
         if similar:
             logging.warning(f"El endpoint {metodo.upper()} {path} del Excel no coincide de forma identica; el contrato "
                             f"del Service Domain tiene {metodo.upper()} {similar} (revise el nombre del path param).")
@@ -1856,12 +1901,7 @@ def procesar_service_domain(texto_contrato: str, api_name: str, tag: str, grupo,
     'comodin'; por defecto MODO_PATH_PARAM). Lanza ValueError si el contrato no es un
     OpenAPI valido o si no queda ninguna operacion."""
     modo = modo_path_param or MODO_PATH_PARAM
-    try:
-        contrato = yaml.safe_load(texto_contrato)
-    except yaml.YAMLError as error:
-        raise ValueError(f"el contrato del Service Domain no es YAML valido: {error}") from error
-    if not isinstance(contrato, dict) or not isinstance(contrato.get('paths'), dict):
-        raise ValueError("el contrato del Service Domain no tiene 'paths'.")
+    contrato = cargar_contrato_service_domain(texto_contrato)
 
     endpoints = endpoints_excel(grupo, modo)
     paths_originales = contrato['paths']
@@ -1909,7 +1949,8 @@ def carpetas_service_domain(valor: str) -> list:
 def obtener_contrato_service_domain(sd: str, service_domains: list, cache: dict) -> str | None:
     """Texto del contrato del Service Domain, buscado solo en las subcarpetas de
     plantillas BIAN ('cache["carpetas"]'). La lista de archivos y cada contrato se
-    descargan una sola vez ('cache')."""
+    descargan una sola vez ('cache'); la ruta de cada plantilla queda en
+    'cache["rutas"]'."""
     if sd in cache['contratos']:
         return cache['contratos'][sd]
     if cache['archivos'] is None:
@@ -1917,6 +1958,7 @@ def obtener_contrato_service_domain(sd: str, service_domains: list, cache: dict)
                                                  cache['carpetas'])
     texto = None
     ruta = buscar_contrato_service_domain(sd, cache['archivos'], service_domains)
+    cache.setdefault('rutas', {})[sd] = ruta
     if ruta:
         logging.info(f"Contrato del Service Domain '{sd}': {SERVICE_DOMAIN_REPO}/{ruta}.")
         texto, _ = obtener_archivo(SERVICE_DOMAIN_REPO, ruta, SERVICE_DOMAIN_REF, owner=SERVICE_DOMAIN_OWNER)
