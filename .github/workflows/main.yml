@@ -55,6 +55,18 @@ jobs:
        run: |
          pip install pandas openpyxl requests
 
+     - name: Validar Excel
+       id: validate_excel
+       continue-on-error: true
+       run: |
+          python3 scripts/validate_excel.py --file "$(ls -t *.xlsx | head -n1)" --validate_styles REST,GraphQL,Event-Driven,PQL
+       env:
+         GITHUB_TOKEN: ${{ env.ACCESS_TOKEN }}
+         GITHUB_OWNER: ${{ github.repository_owner }}
+         GITHUB_REPO: ${{ github.event.repository.name }}
+         PR_NUMBER: ${{ github.event.pull_request.number }}
+         WORKFLOW_RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
   create_repo:
     name: Crear Repositorio de APIs
     needs: [validate_pr]
@@ -106,5 +118,10 @@ jobs:
        env:
         GITHUB_TOKEN: ${{ env.ACCESS_TOKEN }}
         GITHUB_OWNER: ${{ github.repository_owner }}
+        SERVICE_DOMAIN_REPO: ${{ vars.SERVICE_DOMAIN_REPO }}
+        SERVICE_DOMAIN_OWNER: ${{ vars.SERVICE_DOMAIN_OWNER }}
+        SERVICE_DOMAIN_REF: ${{ vars.SERVICE_DOMAIN_REF }}
+        SERVICE_DOMAIN_PATHS: ${{ vars.SERVICE_DOMAIN_PATHS }}
+        SERVICE_DOMAIN_PATH_PARAM_MODE: ${{ vars.SERVICE_DOMAIN_PATH_PARAM_MODE }}
        run: |
         python3 scripts/update_spec_api.py
