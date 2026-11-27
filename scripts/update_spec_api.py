@@ -1290,6 +1290,10 @@ PREFIJO_OPERATION_ID_POR_METODO = {
     'delete': 'delete',
 }
 
+# Prefijo del GET sobre una coleccion (path sin parametro ni verbo de controlador al
+# final); el recurso va en plural para no repetir el operationId del GET por id.
+PREFIJO_OPERATION_ID_COLECCION = 'list'
+
 
 def _es_parametro_path(segmento: str) -> bool:
     return segmento.startswith('{') and segmento.endswith('}')
@@ -1327,7 +1331,11 @@ def construir_operation_id_rest(metodo: str, endpoint: str) -> str:
     (ej. '/processing-orders/{processingOrderId}/retrieve' -> 'retrieveProcessingOrder')
     y en plural si actua sobre la coleccion (ej. '/processing-orders/retrieve' ->
     'retrieveProcessingOrders'); si el recurso no tiene plural, la coleccion lleva el
-    sufijo 'List' (ej. '/production/retrieve' -> 'retrieveProductionList')."""
+    sufijo 'List' (ej. '/production/retrieve' -> 'retrieveProductionList').
+    Un GET sobre una coleccion (path que no termina en parametro ni en verbo de
+    controlador) usa 'list' + el recurso en plural, para no repetir el operationId del
+    GET por id (ej. 'GET /factoring-orders' -> 'listFactoringOrders' frente a
+    'GET /factoring-orders/{factoringOrderId}' -> 'getFactoringOrder')."""
     segmentos = [s for s in endpoint.strip().split('/') if s]
     if not segmentos:
         return ''
@@ -1356,6 +1364,8 @@ def construir_operation_id_rest(metodo: str, endpoint: str) -> str:
     if metodo == 'post':
         tiene_padre = any(_es_parametro_path(s) for s in segmentos[:-1])
         prefijo = 'add' if tiene_padre else 'create'
+    elif metodo == 'get':
+        return PREFIJO_OPERATION_ID_COLECCION + nombre_recurso_operation_id(ultimo, singular=False)
     else:
         prefijo = PREFIJO_OPERATION_ID_POR_METODO.get(metodo, metodo)
     return prefijo + nombre_recurso_operation_id(ultimo)
