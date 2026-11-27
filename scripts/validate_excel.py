@@ -2,7 +2,7 @@ import argparse
 import os
 import re
 import sys
-import panda as pd
+import pandas as pd
 import requests
 import unicodedata
 
